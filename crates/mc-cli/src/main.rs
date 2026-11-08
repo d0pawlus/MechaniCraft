@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result, anyhow};
+use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
 use mc_core::{CoordId, CoordLabel, Mechanism, Trajectory, analyze};
 use mc_samfile::{ImportError, SamError, import_sam};
@@ -50,7 +51,18 @@ enum Command {
 }
 
 fn main() -> ExitCode {
-    match run(Cli::parse()) {
+    // Usage errors must exit 1, not clap's default 2, because 2 means "partial CSV".
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            let _ = err.print();
+            return match err.kind() {
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => ExitCode::SUCCESS,
+                _ => ExitCode::from(1),
+            };
+        }
+    };
+    match run(cli) {
         Ok(code) => code,
         Err(err) => {
             eprintln!("mcraft: {err:#}");
@@ -165,6 +177,8 @@ fn check_command(dir: &Path) -> Result<ExitCode> {
     let mut files = sam_files(dir)?;
     files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
     let (mut ok, mut unsupported, mut failed) = (0usize, 0usize, 0usize);
     for path in &files {
         let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
@@ -186,29 +200,36 @@ fn check_command(dir: &Path) -> Result<ExitCode> {
                 ("FAILED", msg)
             }
         };
-        println!("{status}  {name}  {detail}");
+        writeln!(out, "{status}  {name}  {detail}").context("cannot write check report")?;
     }
 
-    println!(
+    writeln!(
+        out,
         "{} files: {ok} OK, {unsupported} UNSUPPORTED, {failed} FAILED",
         files.len()
-    );
+    )
+    .context("cannot write check summary")?;
+    out.flush().context("cannot write check report")?;
     Ok(if failed > 0 { ExitCode::from(1) } else { ExitCode::SUCCESS })
 }
 
-/// Lists the regular files in `dir` (non-recursive) whose extension is `sam`,
-/// compared case-insensitively.
+/// Lists the entries of `dir` (non-recursive) whose extension is `sam`,
+/// compared case-insensitively. Only directories are skipped; an entry whose
+/// file type cannot be read is kept, so that reading it reports a FAILED line
+/// instead of vanishing silently.
 fn sam_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let entries =
         fs::read_dir(dir).with_context(|| format!("cannot read directory {}", dir.display()))?;
     let mut files = Vec::new();
     for entry in entries {
-        let path = entry?.path();
+        let entry = entry.with_context(|| format!("cannot list directory {}", dir.display()))?;
+        let path = entry.path();
         let is_sam = path
             .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("sam"));
-        if is_sam && path.is_file() {
+        let is_dir = matches!(entry.file_type(), Ok(ft) if ft.is_dir());
+        if is_sam && !is_dir {
             files.push(path);
         }
     }

@@ -218,10 +218,67 @@ fn check_summarises_and_fails_only_on_failed() {
 }
 
 #[test]
+fn analyze_unparseable_nodes_exits_with_1() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("demo.sam");
+    fs::write(&input, SLIDER_CRANK).unwrap();
+
+    // Usage errors must exit 1; clap's default 2 would collide with "partial CSV".
+    let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "abc"]);
+    assert_eq!(output.status.code(), Some(1), "stderr = {}", stderr_of(&output));
+}
+
+#[test]
+fn analyze_missing_file_argument_exits_with_1() {
+    let output = run(&["analyze"]);
+    assert_eq!(output.status.code(), Some(1), "stderr = {}", stderr_of(&output));
+}
+
+#[test]
+fn help_exits_with_0() {
+    let output = run(&["--help"]);
+    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+}
+
+#[test]
+fn analyze_row_zero_matches_file_coordinates() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("demo.sam");
+    fs::write(&input, SLIDER_CRANK).unwrap();
+
+    let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "1,3"]);
+    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    let stdout = stdout_of(&output);
+    let mut lines = stdout.lines();
+    let header: Vec<&str> = lines.next().unwrap().split(',').collect();
+    let row: Vec<f64> = lines
+        .next()
+        .unwrap()
+        .split(',')
+        .skip(1) // step index
+        .map(|v| v.parse().unwrap())
+        .collect();
+    // Column lookup by header name; the first column is `step`, which is skipped above.
+    let value = |name: &str| -> f64 {
+        let idx = header.iter().position(|h| *h == name).unwrap();
+        row[idx - 1]
+    };
+    // Node 1 is fixed in both axes at its file coordinates (X:0, Y:0.05).
+    assert!((value("X1") - 0.0).abs() < 1e-9, "X1 = {}", value("X1"));
+    assert!((value("Y1") - 0.05).abs() < 1e-9, "Y1 = {}", value("Y1"));
+    assert_eq!(value("VX1"), 0.0);
+    // Node 3 slides horizontally from its file coordinate X:0.4 with Y fixed at 0.
+    assert!((value("X3") - 0.4).abs() < 1e-9, "X3 = {}", value("X3"));
+    assert!(value("Y3").abs() < 1e-9, "Y3 = {}", value("Y3"));
+}
+
+#[test]
 fn analyze_partial_result_exits_with_2() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("runaway.sam");
-    // An absurd rotation makes Newton fail after a few steps.
+    // Exit 2 is triggered by an input far outside the reachable range: a
+    // rotation of 1e6 rad in one second is not reachable from the previous
+    // configuration, so Newton stops with no convergence after a few steps.
     fs::write(&input, SLIDER_CRANK.replace("MOTION:6.28318512", "MOTION:1000000")).unwrap();
     let out = dir.path().join("partial.csv");
 
