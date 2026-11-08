@@ -172,8 +172,9 @@ pub fn element_modes(mech: &Mechanism, el: &Element, q: &[f64], qd: &[f64]) -> V
 /// Lists the role of every mode as `(element index, mode index, role)`, in
 /// element order and then mode order.
 ///
-/// Slider mode 0 is `Driven(i)` when `mech.inputs[i]` targets the element,
-/// otherwise `Free`. Hinge and motor mode 0: an input takes precedence over
+/// Beam and slider mode 0 (length change) is `Driven(i)` when `mech.inputs[i]`
+/// targets the element; otherwise a slider leaves it `Free` and a beam holds it
+/// `Rigid`. Hinge and motor mode 0: an input takes precedence over
 /// `fixed` (`Driven(i)`), then `fixed` gives `Rigid`, else `Free`. All
 /// remaining beam and slider modes are `Rigid`.
 pub fn mode_roles(mech: &Mechanism) -> Vec<(usize, usize, ModeRole)> {
@@ -182,7 +183,10 @@ pub fn mode_roles(mech: &Mechanism) -> Vec<(usize, usize, ModeRole)> {
         let input = mech.inputs.iter().position(|inp| inp.element_nr == el.nr);
         match &el.kind {
             ElementKind::Beam { .. } => {
-                roles.extend((0..3).map(|m| (idx, m, ModeRole::Rigid)));
+                let first = input.map_or(ModeRole::Rigid, ModeRole::Driven);
+                roles.push((idx, 0, first));
+                roles.push((idx, 1, ModeRole::Rigid));
+                roles.push((idx, 2, ModeRole::Rigid));
             }
             ElementKind::Slider { .. } => {
                 let first = input.map_or(ModeRole::Free, ModeRole::Driven);
@@ -393,5 +397,25 @@ mod tests {
             .filter(|(e, _, r)| *e < 2 && *r == ModeRole::Rigid)
             .count();
         assert_eq!(rigid, 6);
+    }
+
+    #[test]
+    fn roles_for_driven_beam() {
+        let mut b = MechanismBuilder::new();
+        b.node(1, 0.0, 0.0, true, true)
+            .node(2, 1.0, 0.0, false, true)
+            .angle(1001, 0.0, false)
+            .angle(1002, 0.0, false)
+            .beam(1, 1, 2, 1001, 1002)
+            .input(1, law());
+        let mech = b.build().unwrap();
+        assert_eq!(
+            mode_roles(&mech),
+            vec![
+                (0, 0, ModeRole::Driven(0)),
+                (0, 1, ModeRole::Rigid),
+                (0, 2, ModeRole::Rigid),
+            ]
+        );
     }
 }

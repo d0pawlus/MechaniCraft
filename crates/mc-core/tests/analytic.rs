@@ -223,3 +223,34 @@ fn under_constrained_is_not_square() {
         }
     );
 }
+
+#[test]
+fn linear_actuator_matches_analytic() {
+    let drive = InputLaw {
+        segments: vec![Segment::Linear {
+            duration: 1.0,
+            steps: 10,
+            displacement: -0.05,
+        }],
+    };
+    let mut b = MechanismBuilder::new();
+    b.node(1, 0.0, 0.0, true, true)
+        .node(2, 1.0, 0.0, false, true)
+        .angle(1001, 0.0, false)
+        .angle(1002, 0.0, false)
+        .beam(1, 1, 2, 1001, 1002)
+        .input(1, drive.clone());
+    let mech = b.build().unwrap();
+    let traj = analyze(&mech).unwrap();
+    assert!(traj.failure.is_none(), "failure: {:?}", traj.failure);
+    assert_eq!(traj.states.len(), 11);
+    let (x2_id, _) = mech.node(2).unwrap();
+    for s in &traj.states {
+        let (u, _, _) = drive.eval(s.t);
+        let (x2, _) = pos(&mech, s, 2);
+        let (vx2, _) = vel(&mech, s, 2);
+        assert_abs_diff_eq!(x2, 1.0 + u, epsilon = 1e-12);
+        assert_abs_diff_eq!(vx2, -0.05, epsilon = 1e-10);
+        assert_abs_diff_eq!(s.qdd[x2_id.0], 0.0, epsilon = 1e-9);
+    }
+}

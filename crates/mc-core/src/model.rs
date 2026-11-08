@@ -121,8 +121,6 @@ pub enum ModelError {
     UnknownInputElement(u32),
     #[error("beam or slider {0} has zero length in its initial configuration")]
     ZeroLengthBeam(u32),
-    #[error("element {0} is a beam and cannot be driven by an input in phase 1")]
-    InputOnNonDrivable(u32),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -356,14 +354,10 @@ impl MechanismBuilder {
 
     fn check_inputs(&self) -> Result<(), ModelError> {
         for input in &self.inputs {
-            let element = self
-                .elements
+            self.elements
                 .iter()
                 .find(|e| e.nr() == input.element_nr)
                 .ok_or(ModelError::UnknownInputElement(input.element_nr))?;
-            if let ElementSpec::Beam { nr, .. } = element {
-                return Err(ModelError::InputOnNonDrivable(*nr));
-            }
         }
         Ok(())
     }
@@ -526,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_input_on_beam_in_phase1() {
+    fn accepts_input_on_beam() {
         let mut b = MechanismBuilder::new();
         b.node(1, 0.0, 0.0, true, true)
             .node(2, 0.1, 0.0, false, false)
@@ -534,7 +528,7 @@ mod tests {
             .angle(1002, 0.0, false)
             .beam(1, 1, 2, 1001, 1002)
             .input(1, drive_law());
-        assert_eq!(b.build().unwrap_err(), ModelError::InputOnNonDrivable(1));
+        assert!(b.build().is_ok());
     }
 
     #[test]
