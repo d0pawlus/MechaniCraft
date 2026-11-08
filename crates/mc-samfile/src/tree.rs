@@ -110,19 +110,24 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     let mut stack: Vec<(usize, SamNode)> = Vec::new();
 
     // Inside a mis-indented `LINETYPE<n>` style block that is skipped up to its `ENDOBJ`.
-    let mut in_style_block = false;
+    let mut style_block_start: Option<usize> = None;
 
     for (line_no, raw) in lines {
         let content = raw.trim();
         if content == "ENDSAM" {
+            if let Some(start) = style_block_start {
+                return Err(unterminated(start));
+            }
             break;
         }
-        if in_style_block {
-            in_style_block = content != "ENDOBJ";
+        if style_block_start.is_some() {
+            if content == "ENDOBJ" {
+                style_block_start = None;
+            }
             continue;
         }
         if is_style_block_start(content) {
-            in_style_block = true;
+            style_block_start = Some(line_no);
             continue;
         }
         if content.is_empty() || content == "ENDOBJ" {
@@ -171,11 +176,23 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
         }
     }
 
+    if let Some(start) = style_block_start {
+        return Err(unterminated(start));
+    }
+
     while !stack.is_empty() {
         close_top(&mut stack, &mut root);
     }
 
     Ok(SamTree { format_version, root })
+}
+
+/// Error for a skipped `LINETYPE<n>:` block that never reaches its `ENDOBJ`.
+fn unterminated(start: usize) -> SamError {
+    SamError::Missing {
+        key: "ENDOBJ".to_owned(),
+        line: start,
+    }
 }
 
 /// Detects a `LINETYPE<n>:` line (for example `LINETYPE1:`).
@@ -458,6 +475,20 @@ ENDSAM
         assert_eq!(
             parse("SAMASCII\nabc\nENDSAM\n").unwrap_err(),
             SamError::BadNumber { key: "format_version".to_owned(), line: 2 }
+        );
+    }
+
+    #[test]
+    fn unterminated_linetype_block_is_reported_at_its_start() {
+        let at_endsam = "SAMASCII\n802\n ELEMGROUPS:\n LINETYPE1:\n  COLOR:1\nENDSAM\n";
+        assert_eq!(
+            parse(at_endsam).unwrap_err(),
+            SamError::Missing { key: "ENDOBJ".to_owned(), line: 4 }
+        );
+        let at_eof = "SAMASCII\n802\n ELEMGROUPS:\n LINETYPE1:\n  COLOR:1\n";
+        assert_eq!(
+            parse(at_eof).unwrap_err(),
+            SamError::Missing { key: "ENDOBJ".to_owned(), line: 4 }
         );
     }
 }

@@ -29,14 +29,20 @@ fn slcr_matches_analytic() {
     let traj = analyze(&mech).unwrap();
     assert!(traj.failure.is_none(), "failure: {:?}", traj.failure);
 
+    assert_eq!(traj.states.len(), 37);
+
     let pos = |s: &mc_core::State, nr: u32| {
         let (x, y) = mech.node(nr).unwrap();
         (s.q[x.0], s.q[y.0])
     };
-    let init = &traj.states[0];
-    let (x1, y1) = pos(init, 1);
-    let (x2, y2) = pos(init, 2);
-    let (x3, y3) = pos(init, 3);
+    // Initial geometry comes from the imported model, not from the solved states.
+    let init = |nr: u32| {
+        let (x, y) = mech.node(nr).unwrap();
+        (mech.coords[x.0].value0, mech.coords[y.0].value0)
+    };
+    let (x1, y1) = init(1);
+    let (x2, y2) = init(2);
+    let (x3, y3) = init(3);
     let r = (x2 - x1).hypot(y2 - y1);
     let l = (x3 - x2).hypot(y3 - y2);
     let theta0 = (y2 - y1).atan2(x2 - x1);
@@ -75,6 +81,7 @@ fn phase1_examples_analyze() {
         "TRFR.SAM",
         "QKRT.SAM",
         "DXFDEMO (detached).SAM",
+        "BED.SAM",
     ] {
         let result = std::fs::read(dir.join(name))
             .map_err(|e| e.to_string())
@@ -95,15 +102,3 @@ fn phase1_examples_analyze() {
     assert!(failures.is_empty(), "failing examples: {failures:#?}");
 }
 
-/// BED.SAM drives BEAM 1 by elongation (`ELONGATION:1`, input `KIND:1`). The model
-/// does not support inputs on beams yet, so the import reports it. When mc-core
-/// gains beam-elongation inputs this test must move into `phase1_examples_analyze`.
-#[test]
-fn bed_beam_elongation_input_is_not_yet_supported() {
-    let Some(dir) = examples_dir() else { return };
-    let bytes = std::fs::read(dir.join("BED.SAM")).unwrap();
-    assert_eq!(
-        import_sam(&bytes).unwrap_err(),
-        mc_samfile::ImportError::Model(mc_core::ModelError::InputOnNonDrivable(1))
-    );
-}

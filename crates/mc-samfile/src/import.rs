@@ -116,13 +116,34 @@ fn read_inputs(tree: &SamTree, builder: &mut MechanismBuilder) -> Result<(), Sam
                 line: kind.line,
             });
         }
-        // Real files put the curves next to CURVELIST under MOTIONBLOCK; an
-        // indented layout would nest them below KIND, so both are searched.
-        let mut segments = Vec::new();
-        for curve in block.children.iter().chain(kind.children.iter()) {
-            if curve.key == "CURVELIST" || !curve.key.starts_with('C') {
-                continue;
+        match block.get("AXIS") {
+            None => {}
+            Some(axis) => {
+                let n: i64 = block.num("AXIS")?;
+                if n != 0 {
+                    return Err(SamError::Unsupported {
+                        what: format!("input AXIS {n}"),
+                        line: axis.line,
+                    });
+                }
             }
+        }
+        // Curve segments are siblings of CURVELIST (real files, below KIND), or
+        // direct children of the block, or nested inside CURVELIST. All places
+        // are searched and the result is kept in file order.
+        let mut curves: Vec<&SamNode> = Vec::new();
+        for parent in [block, kind] {
+            for child in &parent.children {
+                if child.key == "CURVELIST" {
+                    curves.extend(child.children.iter());
+                } else if child.key.starts_with('C') {
+                    curves.push(child);
+                }
+            }
+        }
+        curves.sort_by_key(|curve| curve.line);
+        let mut segments = Vec::with_capacity(curves.len());
+        for curve in curves {
             if curve.key != "CLINEAR" {
                 return Err(SamError::Unsupported {
                     what: format!("motion {}", curve.key),
@@ -130,6 +151,12 @@ fn read_inputs(tree: &SamTree, builder: &mut MechanismBuilder) -> Result<(), Sam
                 });
             }
             segments.push(read_linear(curve)?);
+        }
+        if segments.is_empty() {
+            return Err(SamError::Missing {
+                key: "CLINEAR".to_owned(),
+                line: block.line,
+            });
         }
         builder.input(element, InputLaw { segments });
     }
@@ -292,18 +319,112 @@ ENDSAM
         }
     }
 
+    const CURVE_FLAT: &str =
+        "  CLINEAR:\n   NSTEPS:36\n   CTIME:1\n   MOTION:6.28318512\n   ENDOBJ\n";
+
+    fn line_of(text: &str, needle: &str) -> usize {
+        text.lines().position(|l| l == needle).unwrap() + 1
+    }
+
+    fn sam_err(text: &str) -> SamError {
+        match import_sam(text.as_bytes()).unwrap_err() {
+            ImportError::Sam(e) => e,
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
     #[test]
     fn rejects_non_positive_ctime() {
         let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("CTIME:1", "CTIME:0");
-        assert!(matches!(
-            import_sam(text.as_bytes()).unwrap_err(),
-            ImportError::Sam(SamError::BadNumber { .. })
-        ));
+        let line = line_of(&text, "   CTIME:0");
+        assert_eq!(
+            sam_err(&text),
+            SamError::BadNumber { key: "CTIME".into(), line }
+        );
+    }
+
+    #[test]
+    fn rejects_zero_nsteps() {
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("NSTEPS:36", "NSTEPS:0");
+        let line = line_of(&text, "   NSTEPS:0");
+        assert_eq!(
+            sam_err(&text),
+            SamError::BadNumber { key: "NSTEPS".into(), line }
+        );
+    }
+
+    #[test]
+    fn kind_2_is_unsupported() {
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("KIND:1", "KIND:2");
+        let line = line_of(&text, "  KIND:2");
+        assert_eq!(
+            sam_err(&text),
+            SamError::Unsupported { what: "input KIND 2".into(), line }
+        );
     }
 
     #[test]
     fn missing_doflist_is_reported() {
-        let err = import_sam(b"SAMASCII\n802\nENDSAM\n").unwrap_err();
-        assert!(matches!(err, ImportError::Sam(SamError::Missing { .. })));
+        match sam_err("SAMASCII\n802\nENDSAM\n") {
+            SamError::Missing { key, .. } => assert_eq!(key, "DOFLIST"),
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    #[test]
+    fn curves_nested_in_curvelist_are_read() {
+        let flat = slider_crank_text("ROTMOTOR", "CLINEAR");
+        let nested = flat.replace(
+            CURVE_FLAT,
+            "   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.28318512\n    ENDOBJ\n",
+        );
+        assert_ne!(flat, nested);
+        let mech = import_sam(nested.as_bytes()).unwrap();
+        assert_eq!(mech.inputs[0].law.segments.len(), 1);
+    }
+
+    #[test]
+    fn curves_beside_curvelist_under_kind_are_read() {
+        // Layout of real files: CURVELIST and the curves are both children of KIND.
+        let flat = slider_crank_text("ROTMOTOR", "CLINEAR");
+        let real = flat.replace(
+            &format!("  CURVELIST:\n{CURVE_FLAT}"),
+            "   CURVELIST:\n   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.28318512\n    ENDOBJ\n",
+        );
+        assert_ne!(flat, real);
+        let mech = import_sam(real.as_bytes()).unwrap();
+        assert_eq!(mech.inputs[0].law.segments.len(), 1);
+    }
+
+    #[test]
+    fn motionblock_without_curves_is_reported() {
+        let flat = slider_crank_text("ROTMOTOR", "CLINEAR");
+        let text = flat.replace(CURVE_FLAT, "");
+        assert_ne!(flat, text);
+        let line = line_of(&text, " MOTIONBLOCK:");
+        assert_eq!(
+            sam_err(&text),
+            SamError::Missing { key: "CLINEAR".into(), line }
+        );
+    }
+
+    #[test]
+    fn nonzero_axis_is_unsupported() {
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("
+  AXIS:0
+", "
+  AXIS:1
+");
+        let line = line_of(&text, "  AXIS:1");
+        assert_eq!(
+            sam_err(&text),
+            SamError::Unsupported { what: "input AXIS 1".into(), line }
+        );
+    }
+
+    #[test]
+    fn missing_axis_defaults_to_zero() {
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("  AXIS:0\n", "");
+        assert!(import_sam(text.as_bytes()).is_ok());
     }
 }
