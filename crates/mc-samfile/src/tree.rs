@@ -224,7 +224,7 @@ mod tests {
 
     const EXCERPT: &str = "SAMASCII
 802
-BUILDNRREAD:8.0.1.161
+BUILDNRREAD:8.0.0.1
 CREATORTYPE_PRO
  ELEMGROUPS:
   ELEMGRP:
@@ -234,7 +234,7 @@ CREATORTYPE_PRO
      NR:1
      OUTELEMFLAGS:
       OUTFLAGS:0
-      ATLEFTFL:4294967295
+      ATLEFTFL:1048575
       ENDOBJ
      OPTIMIZATIONS:3
       0  0.00000000000000E+0000  0.00000000000000E+0000
@@ -248,8 +248,8 @@ DOFLIST:
  NODE:
   NR:1
   FIXAXIS:3
-  X:-0.0568627450977601
-  Y:0.480392156862308
+  X:-0.0731905512049187
+  Y:0.412760381129364
  ANGLE:
   NR:1001
   FIXAXIS:0
@@ -263,11 +263,11 @@ INPUT:
    CLINEAR:
     NSTEPS:36
     CTIME:1
-    MOTION:6.28318512
+    MOTION:6.283185307179586
     ENDOBJ
 WCS:
  DEFAULT:
-  -9.93233686916710E-0002  9.61406402354605E-0001  8.34810350368571E-0001  3.03968763346986E-0002
+  -1.27384650192837E-0002  4.52019376418205E-0001  7.30158249613720E-0001  2.18463509174026E-0002
 GRAPHOPTIONS:
  TITLE:Graph of Selected items
  LB_LEFT:
@@ -365,7 +365,7 @@ ENDSAM
 
     #[test]
     fn real_header_places_element_tree_at_root() {
-        let text = "SAMASCII\n802\nBUILDNRREAD:8.0.1.161\nCREATORTYPE_PRO\n ELEMGROUPS:\n  ELEMGRP:\n   ELEMLIST:\n    BEAM:\n     NR:1\nDOFLIST:\n NODE:\n  NR:1\nENDSAM\n";
+        let text = "SAMASCII\n802\nBUILDNRREAD:8.0.0.1\nCREATORTYPE_PRO\n ELEMGROUPS:\n  ELEMGRP:\n   ELEMLIST:\n    BEAM:\n     NR:1\nDOFLIST:\n NODE:\n  NR:1\nENDSAM\n";
         let tree = parse(text).unwrap();
         let keys: Vec<&str> = tree.root.iter().map(|n| n.key.as_str()).collect();
         assert_eq!(keys, ["BUILDNRREAD", "ELEMGROUPS", "DOFLIST"]);
@@ -391,7 +391,7 @@ ENDSAM
     fn parses_excerpt_structure() {
         let tree = parse(EXCERPT).unwrap();
         assert_eq!(tree.format_version, 802);
-        assert_eq!(tree.get("BUILDNRREAD").unwrap().value, "8.0.1.161");
+        assert_eq!(tree.get("BUILDNRREAD").unwrap().value, "8.0.0.1");
         let keys: Vec<&str> = tree.root.iter().map(|n| n.key.as_str()).collect();
         assert_eq!(
             keys,
@@ -401,11 +401,11 @@ ENDSAM
         let beam = beam_of(&tree);
         assert_eq!(beam.get("NR").unwrap().value, "1");
         let atleftfl = beam.get("OUTELEMFLAGS").unwrap().get("ATLEFTFL").unwrap();
-        assert_eq!(atleftfl.value.parse::<u64>().unwrap(), 4294967295);
+        assert_eq!(atleftfl.value.parse::<u64>().unwrap(), 1048575);
         assert_eq!(beam.get("OPTIMIZATIONS").unwrap().rows.len(), 3);
 
         let dof = tree.get("DOFLIST").unwrap();
-        assert_eq!(dof.get("NODE").unwrap().num::<f64>("X").unwrap(), -0.0568627450977601);
+        assert_eq!(dof.get("NODE").unwrap().num::<f64>("X").unwrap(), -0.0731905512049187);
         assert_eq!(dof.get("ANGLE").unwrap().num::<u32>("NR").unwrap(), 1001);
 
         let clinear = tree
@@ -418,7 +418,7 @@ ENDSAM
             .get("CLINEAR")
             .unwrap();
         assert_eq!(clinear.num::<u32>("NSTEPS").unwrap(), 36);
-        assert_eq!(clinear.num::<f64>("MOTION").unwrap(), 6.28318512);
+        assert_eq!(clinear.num::<f64>("MOTION").unwrap(), 6.283185307179586);
 
         assert_eq!(tree.get("WCS").unwrap().get("DEFAULT").unwrap().rows.len(), 1);
         let graph = tree.get("GRAPHOPTIONS").unwrap();
@@ -441,7 +441,7 @@ CREATORTYPE_PRO
       0  0.0  0.0
  LINETYPE1:
   ISCUSTOM:0
-  COLOR:8388672
+  COLOR:4210752
    ENDOBJ
      ENDOBJ
      N1:8

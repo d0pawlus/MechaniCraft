@@ -30,11 +30,27 @@ pub fn import_sam(bytes: &[u8]) -> Result<Mechanism, ImportError> {
     Ok(builder.build()?)
 }
 
+/// Upper bound on `NSTEPS` of one curve segment, to keep memory use bounded.
+const MAX_STEPS: u32 = 1_000_000;
+
 fn required<'a>(tree: &'a SamTree, key: &str) -> Result<&'a SamNode, SamError> {
     tree.get(key).ok_or_else(|| SamError::Missing {
         key: key.to_owned(),
         line: 0,
     })
+}
+
+/// Reads a finite `f64` child; `NaN` and infinities are `BadNumber`.
+fn finite(node: &SamNode, key: &str) -> Result<f64, SamError> {
+    let value: f64 = node.num(key)?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(SamError::BadNumber {
+            key: key.to_owned(),
+            line: node.get(key).map_or(node.line, |n| n.line),
+        })
+    }
 }
 
 fn read_dofs(tree: &SamTree, builder: &mut MechanismBuilder) -> Result<(), SamError> {
@@ -43,14 +59,14 @@ fn read_dofs(tree: &SamTree, builder: &mut MechanismBuilder) -> Result<(), SamEr
         match child.key.as_str() {
             "NODE" => {
                 let nr: u32 = child.num("NR")?;
-                let x: f64 = child.num("X")?;
-                let y: f64 = child.num("Y")?;
+                let x = finite(child, "X")?;
+                let y = finite(child, "Y")?;
                 let fix: u32 = child.num("FIXAXIS")?;
                 builder.node(nr, x, y, fix & 1 != 0, fix & 2 != 0);
             }
             "ANGLE" => {
                 let nr: u32 = child.num("NR")?;
-                let a: f64 = child.num("A")?;
+                let a = finite(child, "A")?;
                 let fix: u32 = child.num("FIXAXIS")?;
                 builder.angle(nr, a, fix & 4 != 0);
             }
@@ -171,7 +187,7 @@ fn read_linear(curve: &SamNode) -> Result<Segment, SamError> {
         key: key.to_owned(),
         line: curve.get(key).map_or(curve.line, |n| n.line),
     };
-    if steps < 1 {
+    if !(1..=MAX_STEPS).contains(&steps) {
         return Err(bad("NSTEPS"));
     }
     if !duration.is_finite() || duration <= 0.0 {
@@ -197,7 +213,7 @@ mod tests {
         format!(
             "SAMASCII
 802
-BUILDNRREAD:8.0.1.161
+BUILDNRREAD:8.0.0.1
 CREATORTYPE_PRO
  ELEMGROUPS:
   ELEMGRP:
@@ -272,7 +288,7 @@ INPUT:
   {curve}:
    NSTEPS:36
    CTIME:1
-   MOTION:6.28318512
+   MOTION:6.283185307179586
    ENDOBJ
 WCS:
  DEFAULT:
@@ -320,7 +336,7 @@ ENDSAM
     }
 
     const CURVE_FLAT: &str =
-        "  CLINEAR:\n   NSTEPS:36\n   CTIME:1\n   MOTION:6.28318512\n   ENDOBJ\n";
+        "  CLINEAR:\n   NSTEPS:36\n   CTIME:1\n   MOTION:6.283185307179586\n   ENDOBJ\n";
 
     fn line_of(text: &str, needle: &str) -> usize {
         text.lines().position(|l| l == needle).unwrap() + 1
@@ -376,7 +392,7 @@ ENDSAM
         let flat = slider_crank_text("ROTMOTOR", "CLINEAR");
         let nested = flat.replace(
             CURVE_FLAT,
-            "   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.28318512\n    ENDOBJ\n",
+            "   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.283185307179586\n    ENDOBJ\n",
         );
         assert_ne!(flat, nested);
         let mech = import_sam(nested.as_bytes()).unwrap();
@@ -389,7 +405,7 @@ ENDSAM
         let flat = slider_crank_text("ROTMOTOR", "CLINEAR");
         let real = flat.replace(
             &format!("  CURVELIST:\n{CURVE_FLAT}"),
-            "   CURVELIST:\n   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.28318512\n    ENDOBJ\n",
+            "   CURVELIST:\n   CLINEAR:\n    NSTEPS:36\n    CTIME:1\n    MOTION:6.283185307179586\n    ENDOBJ\n",
         );
         assert_ne!(flat, real);
         let mech = import_sam(real.as_bytes()).unwrap();
@@ -426,5 +442,35 @@ ENDSAM
     fn missing_axis_defaults_to_zero() {
         let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("  AXIS:0\n", "");
         assert!(import_sam(text.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn rejects_non_finite_coordinates() {
+        for (key, line_text, bad) in [
+            ("X", "  X:0.4", "  X:NaN"),
+            ("Y", "  Y:0.05", "  Y:inf"),
+            ("A", "  A:0.5", "  A:-inf"),
+        ] {
+            let text = slider_crank_text("ROTMOTOR", "CLINEAR");
+            let line = line_of(&text, line_text);
+            let text = text.replacen(line_text, bad, 1);
+            assert_eq!(
+                sam_err(&text),
+                SamError::BadNumber { key: key.into(), line },
+                "key {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn caps_nsteps() {
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("NSTEPS:36", "NSTEPS:1000001");
+        let line = line_of(&text, "   NSTEPS:1000001");
+        assert_eq!(
+            sam_err(&text),
+            SamError::BadNumber { key: "NSTEPS".into(), line }
+        );
+        let ok = slider_crank_text("ROTMOTOR", "CLINEAR").replace("NSTEPS:36", "NSTEPS:1000000");
+        assert!(import_sam(ok.as_bytes()).is_ok());
     }
 }
