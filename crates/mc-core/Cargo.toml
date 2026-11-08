@@ -8,3 +8,7 @@ license.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 mc-motion = { path = "../mc-motion" }
+nalgebra = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
