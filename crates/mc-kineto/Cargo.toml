@@ -1,0 +1,15 @@
+[package]
+name = "mc-kineto"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+nalgebra = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+mc-motion = { path = "../mc-motion" }
+approx = { workspace = true }
