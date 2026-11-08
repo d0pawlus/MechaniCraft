@@ -238,7 +238,9 @@ fn sam_files(dir: &Path) -> Result<Vec<PathBuf>> {
 
 fn classify(bytes: &[u8]) -> Outcome {
     match import_sam(bytes) {
-        Err(ImportError::Sam(SamError::Unsupported { what, .. })) => Outcome::Unsupported(what),
+        Err(ImportError::Sam(SamError::Unsupported { what, line })) => {
+            Outcome::Unsupported(format!("{what} at line {line}"))
+        }
         Err(err) => Outcome::Failed(err.to_string()),
         Ok(mech) => match analyze(&mech) {
             Err(err) => Outcome::Failed(err.to_string()),

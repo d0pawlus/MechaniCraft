@@ -10,7 +10,7 @@ use tempfile::TempDir;
 /// Hand-written slider-crank in the SAM layout (copied from the import tests).
 const SLIDER_CRANK: &str = "SAMASCII
 802
-BUILDNRREAD:8.0.1.161
+BUILDNRREAD:8.0.0.1
 CREATORTYPE_PRO
  ELEMGROUPS:
   ELEMGRP:
@@ -85,7 +85,7 @@ INPUT:
   CLINEAR:
    NSTEPS:36
    CTIME:1
-   MOTION:6.28318512
+   MOTION:6.283185307179586
    ENDOBJ
 WCS:
  DEFAULT:
@@ -194,7 +194,11 @@ fn check_reports_unsupported_without_failing() {
     let output = run(&["check", dir.path().to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
     let stdout = stdout_of(&output);
-    assert!(stdout.contains("UNSUPPORTED"), "stdout = {stdout}");
+    let gear_line = WITH_GEAR.lines().position(|l| l.trim() == "GEAR:").unwrap() + 1;
+    assert!(
+        stdout.contains(&format!("UNSUPPORTED  gear.sam  element GEAR at line {gear_line}")),
+        "stdout = {stdout}"
+    );
     assert!(stdout.contains("1 files: 0 OK, 1 UNSUPPORTED, 0 FAILED"), "stdout = {stdout}");
 }
 
@@ -279,7 +283,7 @@ fn analyze_partial_result_exits_with_2() {
     // Exit 2 is triggered by an input far outside the reachable range: a
     // rotation of 1e6 rad in one second is not reachable from the previous
     // configuration, so Newton stops with no convergence after a few steps.
-    fs::write(&input, SLIDER_CRANK.replace("MOTION:6.28318512", "MOTION:1000000")).unwrap();
+    fs::write(&input, SLIDER_CRANK.replace("MOTION:6.283185307179586", "MOTION:1000000")).unwrap();
     let out = dir.path().join("partial.csv");
 
     let output = run(&["analyze", input.to_str().unwrap(), "-o", out.to_str().unwrap()]);
