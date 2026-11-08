@@ -3,6 +3,7 @@
 //! A keyed line `key:value` opens a node. Its children are the following keyed
 //! lines with a larger indent (number of leading spaces). Lines without a colon
 //! are stored as `rows` of the nearest preceding keyed line with a smaller indent.
+//! A colon-less line at indent 0 is a header token and closes every open node.
 
 use std::str::FromStr;
 
@@ -80,13 +81,14 @@ impl SamTree {
 
 /// Parses the bytes of a SAM ASCII file into a tree.
 ///
-/// Invalid UTF-8 is replaced lossily. Parsing stops at `ENDSAM`.
+/// Invalid UTF-8 is replaced lossily. A leading UTF-8 byte order mark is ignored.
+/// Parsing stops at `ENDSAM`.
 pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     let text = String::from_utf8_lossy(bytes);
     let mut lines = text.lines().enumerate().map(|(index, line)| (index + 1, line));
 
     match lines.next() {
-        Some((_, line)) if line.trim() == "SAMASCII" => {}
+        Some((_, line)) if line.trim_start_matches('\u{feff}').trim() == "SAMASCII" => {}
         _ => return Err(SamError::NotSamAscii),
     }
 
@@ -116,7 +118,14 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
             continue;
         }
 
-        let indent = raw.len() - raw.trim_start_matches(' ').len();
+        let leading = &raw[..raw.len() - raw.trim_start().len()];
+        if leading.contains('\t') {
+            return Err(SamError::Unsupported {
+                what: "tab indentation".to_owned(),
+                line: line_no,
+            });
+        }
+        let indent = leading.len();
 
         match content.split_once(':') {
             Some((key, value)) => {
@@ -135,9 +144,15 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
                     },
                 ));
             }
+            // A colon-less line at indent 0 is a header token: it closes every open block.
+            None if indent == 0 => {
+                while !stack.is_empty() {
+                    close_top(&mut stack, &mut root);
+                }
+            }
             None => {
                 // A row belongs to the nearest open node with a smaller indent.
-                // Rows without such a node (e.g. header tokens) are ignored.
+                // Rows without such a node are ignored.
                 if let Some((_, parent)) = stack.iter_mut().rev().find(|(open, _)| *open < indent) {
                     parent.rows.push(content.to_owned());
                 }
@@ -222,17 +237,16 @@ ENDSAM
         parse_tree(text.as_bytes())
     }
 
-    /// Depth-first search for the first node with the given key.
-    fn find<'a>(nodes: &'a [SamNode], key: &str) -> Option<&'a SamNode> {
-        for node in nodes {
-            if node.key == key {
-                return Some(node);
-            }
-            if let Some(found) = find(&node.children, key) {
-                return Some(found);
-            }
-        }
-        None
+    /// Direct path to the BEAM node of the excerpt: ELEMGROUPS / ELEMGRP / ELEMLIST / BEAM.
+    fn beam_of(tree: &SamTree) -> &SamNode {
+        tree.get("ELEMGROUPS")
+            .unwrap()
+            .get("ELEMGRP")
+            .unwrap()
+            .get("ELEMLIST")
+            .unwrap()
+            .get("BEAM")
+            .unwrap()
     }
 
     #[test]
@@ -250,15 +264,40 @@ ENDSAM
     #[test]
     fn rows_attach_to_parent() {
         let tree = parse(EXCERPT).unwrap();
-        let optimizations = find(&tree.root, "OPTIMIZATIONS").unwrap();
+        let optimizations = beam_of(&tree).get("OPTIMIZATIONS").unwrap();
         assert_eq!(optimizations.rows.len(), 3);
         assert_eq!(optimizations.rows[0], "0  0.00000000000000E+0000  0.00000000000000E+0000");
+    }
+
+    #[test]
+    fn row_attaches_to_nearest_shallower_node_skipping_levels() {
+        // Row at indent 3 sits under B (indent 2), not under C (indent 5).
+        let tree = parse("SAMASCII\n802\nA:\n  B:\n     C:\n   row3\nENDSAM\n").unwrap();
+        let b = tree.get("A").unwrap().get("B").unwrap();
+        let c = b.get("C").unwrap();
+        assert_eq!(b.rows, vec!["row3".to_owned()]);
+        assert!(c.rows.is_empty());
     }
 
     #[test]
     fn rejects_binary() {
         let err = parse_tree(&[0x00, 0x01]).unwrap_err();
         assert_eq!(err, SamError::NotSamAscii);
+    }
+
+    #[test]
+    fn accepts_leading_bom() {
+        let tree = parse("\u{feff}SAMASCII\n802\nTITLE:x\nENDSAM\n").unwrap();
+        assert_eq!(tree.format_version, 802);
+        assert_eq!(tree.get("TITLE").unwrap().value, "x");
+    }
+
+    #[test]
+    fn rejects_tab_indentation_with_line() {
+        assert_eq!(
+            parse("SAMASCII\n802\nNODE:\n\tX:1\nENDSAM\n").unwrap_err(),
+            SamError::Unsupported { what: "tab indentation".to_owned(), line: 4 }
+        );
     }
 
     #[test]
@@ -284,18 +323,63 @@ ENDSAM
     }
 
     #[test]
+    fn real_header_places_element_tree_at_root() {
+        let text = "SAMASCII\n802\nBUILDNRREAD:8.0.1.161\nCREATORTYPE_PRO\n ELEMGROUPS:\n  ELEMGRP:\n   ELEMLIST:\n    BEAM:\n     NR:1\nDOFLIST:\n NODE:\n  NR:1\nENDSAM\n";
+        let tree = parse(text).unwrap();
+        let keys: Vec<&str> = tree.root.iter().map(|n| n.key.as_str()).collect();
+        assert_eq!(keys, ["BUILDNRREAD", "ELEMGROUPS", "DOFLIST"]);
+        assert!(tree.get("ELEMGROUPS").is_some());
+        assert_eq!(
+            tree.get("ELEMGROUPS")
+                .unwrap()
+                .get("ELEMGRP")
+                .unwrap()
+                .get("ELEMLIST")
+                .unwrap()
+                .get("BEAM")
+                .unwrap()
+                .num::<u32>("NR")
+                .unwrap(),
+            1
+        );
+        assert_eq!(tree.get("DOFLIST").unwrap().all("NODE").count(), 1);
+        assert!(tree.get("BUILDNRREAD").unwrap().children.is_empty());
+    }
+
+    #[test]
     fn parses_excerpt_structure() {
         let tree = parse(EXCERPT).unwrap();
         assert_eq!(tree.format_version, 802);
         assert_eq!(tree.get("BUILDNRREAD").unwrap().value, "8.0.1.161");
-        let node = find(&tree.root, "NODE").unwrap();
-        assert_eq!(node.num::<f64>("X").unwrap(), -0.0568627450977601);
-        assert_eq!(find(&tree.root, "ATLEFTFL").unwrap().value, "4294967295");
-        assert_eq!(find(&tree.root, "ATLEFTFL").unwrap().value.parse::<u64>().unwrap(), 4294967295);
-        let clinear = find(&tree.root, "CLINEAR").unwrap();
+        let keys: Vec<&str> = tree.root.iter().map(|n| n.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["BUILDNRREAD", "ELEMGROUPS", "DOFLIST", "INPUT", "WCS", "GRAPHOPTIONS"]
+        );
+
+        let beam = beam_of(&tree);
+        assert_eq!(beam.get("NR").unwrap().value, "1");
+        let atleftfl = beam.get("OUTELEMFLAGS").unwrap().get("ATLEFTFL").unwrap();
+        assert_eq!(atleftfl.value.parse::<u64>().unwrap(), 4294967295);
+        assert_eq!(beam.get("OPTIMIZATIONS").unwrap().rows.len(), 3);
+
+        let dof = tree.get("DOFLIST").unwrap();
+        assert_eq!(dof.get("NODE").unwrap().num::<f64>("X").unwrap(), -0.0568627450977601);
+        assert_eq!(dof.get("ANGLE").unwrap().num::<u32>("NR").unwrap(), 1001);
+
+        let clinear = tree
+            .get("INPUT")
+            .unwrap()
+            .get("MOTIONBLOCK")
+            .unwrap()
+            .get("KIND")
+            .unwrap()
+            .get("CLINEAR")
+            .unwrap();
         assert_eq!(clinear.num::<u32>("NSTEPS").unwrap(), 36);
         assert_eq!(clinear.num::<f64>("MOTION").unwrap(), 6.28318512);
-        assert_eq!(find(&tree.root, "DEFAULT").unwrap().rows.len(), 1);
+
+        assert_eq!(tree.get("WCS").unwrap().get("DEFAULT").unwrap().rows.len(), 1);
         let graph = tree.get("GRAPHOPTIONS").unwrap();
         assert_eq!(graph.get("TITLE").unwrap().value, "Graph of Selected items");
         assert_eq!(graph.get("LB_LEFT").unwrap().value, "");
