@@ -109,10 +109,21 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     // Open nodes as (indent, node), outermost first. Indents strictly increase.
     let mut stack: Vec<(usize, SamNode)> = Vec::new();
 
+    // Inside a mis-indented `LINETYPE<n>` style block that is skipped up to its `ENDOBJ`.
+    let mut in_style_block = false;
+
     for (line_no, raw) in lines {
         let content = raw.trim();
         if content == "ENDSAM" {
             break;
+        }
+        if in_style_block {
+            in_style_block = content != "ENDOBJ";
+            continue;
+        }
+        if is_style_block_start(content) {
+            in_style_block = true;
+            continue;
         }
         if content.is_empty() || content == "ENDOBJ" {
             continue;
@@ -165,6 +176,19 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     }
 
     Ok(SamTree { format_version, root })
+}
+
+/// Detects a `LINETYPE<n>:` line (for example `LINETYPE1:`).
+///
+/// SAM writes this drawing-style block with a fixed one-space indent even when it
+/// sits inside an element block, and ends it with its own `ENDOBJ`. Treated as a
+/// normal node it would close the element it is nested in, so the parser skips
+/// it. `LINETYPES:` (the project-level list) does not match.
+fn is_style_block_start(content: &str) -> bool {
+    content
+        .strip_prefix("LINETYPE")
+        .and_then(|rest| rest.strip_suffix(':'))
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Pops the innermost open node and attaches it to its parent, or to the root list.
@@ -384,6 +408,42 @@ ENDSAM
         assert_eq!(graph.get("TITLE").unwrap().value, "Graph of Selected items");
         assert_eq!(graph.get("LB_LEFT").unwrap().value, "");
         assert_eq!(tree.all("DOFLIST").count(), 1);
+    }
+
+    #[test]
+    fn skips_misindented_linetype_block_inside_element() {
+        let text = "SAMASCII
+802
+CREATORTYPE_PRO
+ ELEMGROUPS:
+  ELEMGRP:
+   ELEMLIST:
+    BEAM:
+     NR:11
+     OPTIMIZATIONS:3
+      0  0.0  0.0
+ LINETYPE1:
+  ISCUSTOM:0
+  COLOR:8388672
+   ENDOBJ
+     ENDOBJ
+     N1:8
+     N2:9
+DOFLIST:
+ NODE:
+  NR:1
+LINETYPES:
+ LINETYPE1:
+  ENDOBJ
+ENDSAM
+";
+        let tree = parse(text).unwrap();
+        let beam = tree.get("ELEMGROUPS").unwrap().get("ELEMGRP").unwrap().get("ELEMLIST").unwrap().get("BEAM").unwrap();
+        assert_eq!(beam.num::<u32>("N1").unwrap(), 8);
+        assert_eq!(beam.num::<u32>("N2").unwrap(), 9);
+        assert!(beam.get("LINETYPE1").is_none());
+        assert_eq!(tree.get("DOFLIST").unwrap().all("NODE").count(), 1);
+        assert!(tree.get("LINETYPES").is_some());
     }
 
     #[test]

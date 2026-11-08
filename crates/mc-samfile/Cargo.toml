@@ -7,3 +7,5 @@ license.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+mc-core = { path = "../mc-core" }
+mc-motion = { path = "../mc-motion" }
