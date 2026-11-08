@@ -1,0 +1,20 @@
+[package]
+name = "mc-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mcraft"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+mc-core = { path = "../mc-core" }
+mc-samfile = { path = "../mc-samfile" }
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile = "3"
