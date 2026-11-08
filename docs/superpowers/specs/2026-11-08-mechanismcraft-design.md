@@ -1,4 +1,4 @@
-# MechanismCraft — projekt i mapa drogowa
+# MechaniCraft — projekt i mapa drogowa
 
 **Data:** 2026-11-08
 **Cel:** współczesny, wieloplatformowy program w Ruście do syntezy, analizy (ruch i siły) i optymalizacji mechanizmów płaskich, funkcjonalnie zbliżony do SAM 8.5 (ARTAS) i potrafiący wczytywać jego projekty.
@@ -35,6 +35,8 @@ ENDSAM
 - Kąty mają numery od `FIRSTANGLENR+1` (zwykle 1001).
 - Każdy element ma własne kątowe stopnie swobody w węzłach (`A1`, `A2`). Przegub to brak wspólnego kąta, a sztywne połączenie to `HINGE` z `FIXED:1`.
 - 22 przykłady leżą w `C:\Users\Public\Documents\Sam\Examples`.
+- Ustalone przy imporcie (Task 6): nagłówek `CREATORTYPE_PRO` (token bez dwukropka na wcięciu 0) zamyka bloki, więc `ELEMGROUPS`, `DOFLIST`, `INPUT` są korzeniami drzewa. `FIXAXIS` węzła: 1 = x, 2 = y; kąta: 4. W `MOTIONBLOCK` krzywe (`CLINEAR`, `CSINQ`, `CMOTIONFILE`) leżą obok `CURVELIST`. Wejście `KIND:1` działa na element: `ROTMOTOR` to obrót względny, a `BEAM` z `ELONGATION:1` to wydłużenie belki (np. `BED.SAM`, wymaga wsparcia w `mc-core`).
+- Blok `LINETYPE<n>:` (styl rysowania) bywa zapisany ze stałym wcięciem 1 wewnątrz bloku elementu (`SCS.sam`) i ma własny `ENDOBJ`. Parser pomija go w całości.
 
 ## 3. Architektura docelowa
 
