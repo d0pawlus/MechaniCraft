@@ -1,4 +1,4 @@
-# MechanismCraft — projekt i mapa drogowa
+# MechaniCraft — projekt i mapa drogowa
 
 **Data:** 2026-11-08
 **Cel:** współczesny, wieloplatformowy program w Ruście do syntezy, analizy (ruch i siły) i optymalizacji mechanizmów płaskich, funkcjonalnie zbliżony do SAM 8.5 (ARTAS) i potrafiący wczytywać jego projekty.

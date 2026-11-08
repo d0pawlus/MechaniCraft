@@ -1,4 +1,4 @@
-//! `mcraft`: command-line front end for the MechanismCraft kinematic core.
+//! `mcraft`: command-line front end for the MechaniCraft kinematic core.
 //!
 //! * `mcraft analyze <FILE> [-o <CSV>] [--nodes 3,2]` imports a `.SAM` file,
 //!   runs the kinematic analysis and writes a CSV table of node positions,
