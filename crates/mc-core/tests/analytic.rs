@@ -77,6 +77,10 @@ fn slider_crank_full_revolution_matches_analytic() {
         assert_abs_diff_eq!(bx, r * th.cos(), epsilon = 1e-9);
         assert_abs_diff_eq!(by, e + r * th.sin(), epsilon = 1e-9);
 
+        let (vx2, vy2) = vel(&mech, s, 2);
+        assert_abs_diff_eq!(vx2, -r * th.sin() * theta_dot, epsilon = 1e-8);
+        assert_abs_diff_eq!(vy2, r * th.cos() * theta_dot, epsilon = 1e-8);
+
         let (vx, _) = vel(&mech, s, 3);
         assert_abs_diff_eq!(vx, dx * theta_dot, epsilon = 1e-8);
 
@@ -137,9 +141,7 @@ fn dist(mech: &Mechanism, s: &State, n1: u32, n2: u32) -> f64 {
 
 #[test]
 fn four_bar_lengths_preserved_and_velocity_consistent() {
-    // A long duration keeps the central-difference truncation error below 1e-4.
-    let duration = 100.0;
-    let mech = four_bar(0.1, 0.35, 0.3, 0.4, PI / 3.0, law(duration, 72));
+    let mech = four_bar(0.1, 0.35, 0.3, 0.4, PI / 3.0, law(1.0, 72));
     let traj = analyze(&mech).unwrap();
     assert!(traj.failure.is_none(), "failure: {:?}", traj.failure);
     assert_eq!(traj.states.len(), 73);
@@ -149,11 +151,15 @@ fn four_bar_lengths_preserved_and_velocity_consistent() {
         assert_abs_diff_eq!(dist(&mech, s, 3, 4), 0.3, epsilon = 1e-10);
     }
     let mut max_speed: f64 = 0.0;
-    for k in 1..traj.states.len() - 1 {
-        let (prev, cur, next) = (&traj.states[k - 1], &traj.states[k], &traj.states[k + 1]);
-        let dt = next.t - prev.t;
+    // Five-point central stencil: truncation error is about 6e-5 at peak speed.
+    let st = &traj.states;
+    for k in 2..st.len() - 2 {
+        let cur = &st[k];
+        let dt = st[k + 1].t - st[k].t;
         for i in 0..cur.q.len() {
-            let fd = (next.q[i] - prev.q[i]) / dt;
+            let fd = (-st[k + 2].q[i] + 8.0 * st[k + 1].q[i] - 8.0 * st[k - 1].q[i]
+                + st[k - 2].q[i])
+                / (12.0 * dt);
             assert_abs_diff_eq!(cur.qd[i], fd, epsilon = 1e-4);
             max_speed = max_speed.max(cur.qd[i].abs());
         }
@@ -183,10 +189,24 @@ fn four_bar_coarse_steps_keep_branch() {
 fn unreachable_input_reports_step_and_keeps_partial() {
     let mech = four_bar(0.3, 0.1, 0.3, 0.4, PI / 3.0, law(1.0, 72));
     let traj = analyze(&mech).unwrap();
+    // The coupler cannot span B-D once |BD| > coupler + rocker. Expected first
+    // failing step: the first grid angle beyond that geometric limit.
+    let expected = (1..=72_u32)
+        .find(|k| {
+            let phi = PI / 3.0 + 2.0 * PI * f64::from(*k) / 72.0;
+            let (bx, by) = (0.3 * phi.cos(), 0.3 * phi.sin());
+            (0.4 - bx).hypot(by) > 0.1 + 0.3
+        })
+        .unwrap();
     match traj.failure {
         Some(SolveError::Singular { step, .. }) | Some(SolveError::NoConvergence { step, .. }) => {
             assert!(step > 0);
             assert_eq!(traj.states.len(), step);
+            assert_eq!(step, expected as usize);
+            let last = traj.states.last().unwrap();
+            assert_abs_diff_eq!(dist(&mech, last, 1, 2), 0.3, epsilon = 1e-10);
+            assert_abs_diff_eq!(dist(&mech, last, 2, 3), 0.1, epsilon = 1e-10);
+            assert_abs_diff_eq!(dist(&mech, last, 3, 4), 0.3, epsilon = 1e-10);
         }
         other => panic!("expected Singular or NoConvergence, got {other:?}"),
     }
