@@ -254,3 +254,72 @@ fn linear_actuator_matches_analytic() {
         assert_abs_diff_eq!(s.qdd[x2_id.0], 0.0, epsilon = 1e-9);
     }
 }
+
+/// Inverted slider-crank (crank and slotted lever): crank O2A from ground
+/// pivot O2 = (0, 0), lever pivot O4 = (0, -0.2). The slider element runs from
+/// O4 to the crank pin A; its length mode is free (A slides along the lever)
+/// and its bending modes are rigid, so its nodal angles follow the lever angle.
+///
+/// Unknowns: A (2) and angles 1..4 (4) = 6; equations: beam 3, slider bending 2,
+/// motor 1 = 6.
+fn inverted_slider_crank(theta0: f64, drive: InputLaw) -> Mechanism {
+    let (r, o4y) = (0.1_f64, -0.2_f64);
+    let (ax, ay) = (r * theta0.cos(), r * theta0.sin());
+    let phi0 = (ay - o4y).atan2(ax);
+    let mut b = MechanismBuilder::new();
+    b.node(1, 0.0, 0.0, true, true)
+        .node(2, ax, ay, false, false)
+        .node(4, 0.0, o4y, true, true)
+        .angle(1, theta0, false)
+        .angle(2, theta0, false)
+        .angle(3, phi0, false)
+        .angle(4, phi0, false)
+        .angle(5, 0.0, true)
+        .beam(1, 1, 2, 1, 2)
+        .slider(2, 4, 2, 3, 4)
+        .rot_motor(3, 5, 1, false)
+        .input(3, drive);
+    b.build().unwrap()
+}
+
+#[test]
+fn inverted_slider_crank_matches_analytic() {
+    let (r, o4y) = (0.1_f64, -0.2_f64);
+    let theta0 = 0.3_f64;
+    let drive = law(1.0, 72);
+    let mech = inverted_slider_crank(theta0, drive.clone());
+    let traj = analyze(&mech).unwrap();
+    assert!(traj.failure.is_none(), "failure: {:?}", traj.failure);
+    assert_eq!(traj.states.len(), 73);
+
+    let theta_dot = 2.0 * PI;
+    let wrap = |x: f64| (x + PI).rem_euclid(2.0 * PI) - PI;
+    let phi_id = mech.angle(3).unwrap();
+    let mut max_s_dot: f64 = 0.0;
+    for s in &traj.states {
+        let (u, _, _) = drive.eval(s.t);
+        let th = theta0 + u;
+        let (dx, dy) = (r * th.cos(), r * th.sin() - o4y);
+        let len = dx.hypot(dy);
+        let phi = dy.atan2(dx);
+        let phi_dot = r * theta_dot * (r - o4y * th.sin()) / (len * len);
+        let s_dot = -o4y * r * th.cos() * theta_dot / len;
+        max_s_dot = max_s_dot.max(s_dot.abs());
+
+        let (ax, ay) = pos(&mech, s, 2);
+        assert_abs_diff_eq!(ax, r * th.cos(), epsilon = 1e-9);
+        assert_abs_diff_eq!(ay, r * th.sin(), epsilon = 1e-9);
+
+        // Lever angle: the slider's nodal angle coordinates, compared mod 2π.
+        assert_abs_diff_eq!(wrap(s.q[phi_id.0] - phi), 0.0, epsilon = 1e-9);
+        let phi_end = mech.angle(4).unwrap();
+        assert_abs_diff_eq!(wrap(s.q[phi_end.0] - phi), 0.0, epsilon = 1e-9);
+        assert_abs_diff_eq!(s.qd[phi_id.0], phi_dot, epsilon = 1e-8);
+
+        // Slider extension rate from the node velocity projected on the lever.
+        let (vx, vy) = vel(&mech, s, 2);
+        let s_dot_solved = (dx * vx + dy * vy) / len;
+        assert_abs_diff_eq!(s_dot_solved, s_dot, epsilon = 1e-8);
+    }
+    assert!(max_s_dot > 1e-2, "slider rate is suspiciously small");
+}
