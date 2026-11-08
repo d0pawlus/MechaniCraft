@@ -171,6 +171,28 @@ pub fn element_modes(mech: &Mechanism, el: &Element, q: &[f64], qd: &[f64]) -> V
     }
 }
 
+/// Absolute angle of the line through the nodes of a beam or slider.
+///
+/// `value = atan2(d)` (not wrapped relative to the initial angle), `grad` is
+/// the gradient of the angle over the four node coordinates and `conv` is
+/// `qd^T (d2 alpha / dq2) qd`. Returns `None` for hinges and rotational
+/// motors, which have no line.
+pub fn line_angle(mech: &Mechanism, el: &Element, q: &[f64], qd: &[f64]) -> Option<ModeEval> {
+    match &el.kind {
+        ElementKind::Beam { p, q: qn, .. } | ElementKind::Slider { p, q: qn, .. } => {
+            let span = Span::new(mech, *p, *qn, q, qd);
+            let mut grad = Vec::with_capacity(4);
+            span.grad_alpha(*p, *qn, 1.0, &mut grad);
+            Some(ModeEval {
+                value: span.alpha,
+                grad,
+                conv: span.conv_alpha(),
+            })
+        }
+        ElementKind::Hinge { .. } | ElementKind::RotMotor { .. } => None,
+    }
+}
+
 /// Lists the role of every mode as `(element index, mode index, role)`, in
 /// element order and then mode order.
 ///
@@ -385,6 +407,36 @@ mod tests {
         let qd = vec![0.0; q.len()];
         let modes = element_modes(&mech, &mech.elements[0], &q, &qd);
         assert!(modes[1].value.abs() < 1e-12, "got {}", modes[1].value);
+    }
+
+    #[test]
+    fn line_angle_matches_bending_mode() {
+        let mut rng = Lcg(11);
+        for mech in [mechanism(), extended()] {
+            let q = perturbed(&mech, &mut rng);
+            let qd: Vec<f64> = (0..q.len()).map(|_| rng.next()).collect();
+            for el in &mech.elements {
+                let la = line_angle(&mech, el, &q, &qd);
+                match &el.kind {
+                    ElementKind::Hinge { .. } | ElementKind::RotMotor { .. } => {
+                        assert!(la.is_none());
+                    }
+                    ElementKind::Beam { p, q: qn, .. } | ElementKind::Slider { p, q: qn, .. } => {
+                        let la = la.unwrap();
+                        let bend = &element_modes(&mech, el, &q, &qd)[1];
+                        let d = [q[qn[0].0] - q[p[0].0], q[qn[1].0] - q[p[1].0]];
+                        assert_eq!(la.value, d[1].atan2(d[0]));
+                        for c in [p[0], p[1], qn[0], qn[1]] {
+                            let g = |m: &ModeEval| -> f64 {
+                                m.grad.iter().filter(|(k, _)| *k == c).map(|(_, v)| v).sum()
+                            };
+                            assert!((g(&la) + g(bend)).abs() < 1e-15);
+                        }
+                        assert!((la.conv + bend.conv).abs() < 1e-15);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -16,4 +16,4 @@ Uwagi drobne, które review uznały za niewymagające poprawki przed scaleniem. 
 - Task 6b: minor (deferred): no multi-segment ordering test; CRLF-in-literal replace strings in nonzero_axis test; AXIS i64 vs KIND u32
 - Final fix wave: re-review clean (8/8 addressed). Out-of-scope minors: hand-built InputLaw step count unbounded (only import caps); validate() doesn't check coordinate kind per id
 - Final review #9: flaga ELONGATION w .SAM nie jest sprawdzana względem wejść
-- Final review #10: udostępnić składanie jakobianu (Problem) dla kinetostatyki w fazie 2
+- Final review #10: udostępnić składanie jakobianu (Problem) dla kinetostatyki w fazie 2 — zrobione w fazie 2 (ModeSystem)
