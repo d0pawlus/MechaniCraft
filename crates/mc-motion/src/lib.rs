@@ -48,7 +48,7 @@ pub struct InputLaw {
 impl InputLaw {
     /// Total duration of all segments.
     pub fn duration(&self) -> f64 {
-        self.segments.iter().map(Segment::duration).sum()
+        self.segment_ends().last().copied().unwrap_or(0.0)
     }
 
     /// Evaluates the law at time `t`, returning `(u, v, a)`.
@@ -64,14 +64,14 @@ impl InputLaw {
             return (0.0, 0.0, 0.0);
         }
 
+        let ends = self.segment_ends();
         let mut t_start = 0.0;
         let mut u_start = 0.0;
         let mut last_velocity = 0.0;
 
-        for segment in &self.segments {
+        for (segment, &t_end) in self.segments.iter().zip(&ends) {
             let duration = segment.duration();
             let displacement = segment.displacement();
-            let t_end = t_start + duration;
             let velocity = if duration > 0.0 {
                 displacement / duration
             } else {
@@ -85,7 +85,9 @@ impl InputLaw {
 
             t_start = t_end;
             u_start += displacement;
-            last_velocity = velocity;
+            if duration > 0.0 {
+                last_velocity = velocity;
+            }
         }
 
         if t == t_start {
@@ -97,23 +99,46 @@ impl InputLaw {
 
     /// Time grid for all segments.
     ///
-    /// Each segment contributes `steps` equal intervals. Points at segment
-    /// joints are shared, so the result has no duplicates. The first point is
-    /// `0.0` and the last is `duration()`. An empty law gives `[0.0]`.
+    /// Each segment with a positive duration contributes `steps` equal
+    /// intervals. Zero-duration segments contribute no points. Segment joints
+    /// use exactly the same end times as [`InputLaw::eval`], so the grid is
+    /// strictly increasing, starts at `0.0` and ends at [`InputLaw::duration`].
+    /// An empty law gives `[0.0]`.
     pub fn time_grid(&self) -> Vec<f64> {
+        let ends = self.segment_ends();
         let mut grid = vec![0.0];
         let mut t_start = 0.0;
 
-        for segment in &self.segments {
+        for (segment, &t_end) in self.segments.iter().zip(&ends) {
             let duration = segment.duration();
-            let steps = segment.steps();
-            for i in 1..=steps {
-                grid.push(t_start + duration * f64::from(i) / f64::from(steps));
+            if duration > 0.0 {
+                let steps = segment.steps();
+                for i in 1..steps {
+                    let point = t_start + duration * f64::from(i) / f64::from(steps);
+                    if point > grid[grid.len() - 1] && point < t_end {
+                        grid.push(point);
+                    }
+                }
+                if t_end > grid[grid.len() - 1] {
+                    grid.push(t_end);
+                }
             }
-            t_start += duration;
+            t_start = t_end;
         }
 
         grid
+    }
+
+    /// End time of each segment, accumulated in order. Shared by `eval`,
+    /// `duration` and `time_grid` so that all three agree bit for bit.
+    fn segment_ends(&self) -> Vec<f64> {
+        let mut ends = Vec::with_capacity(self.segments.len());
+        let mut t = 0.0;
+        for segment in &self.segments {
+            t += segment.duration();
+            ends.push(t);
+        }
+        ends
     }
 }
 
@@ -182,5 +207,59 @@ mod tests {
         assert_abs_diff_eq!(u, 0.0, epsilon = POS_TOL);
         assert_abs_diff_eq!(v, 0.0, epsilon = VEL_TOL);
         assert_abs_diff_eq!(a, 0.0, epsilon = ACC_TOL);
+    }
+
+    #[test]
+    fn eval_clamps_before_start() {
+        assert_eq!(two_segment_law().eval(-1.0), (0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn grid_last_point_matches_eval_end_bitwise() {
+        // d * n / n is not always d in IEEE doubles, so the last grid point
+        // must be the same accumulated end time that eval and duration use.
+        let law = InputLaw {
+            segments: vec![Segment::Linear {
+                duration: 0.1,
+                steps: 3,
+                displacement: 1.0,
+            }],
+        };
+        let grid = law.time_grid();
+        assert_eq!(*grid.last().unwrap(), law.duration());
+        let (_, v, _) = law.eval(*grid.last().unwrap());
+        assert_eq!(v, 1.0 / 0.1);
+    }
+
+    #[test]
+    fn grid_joints_match_eval_segment_ends() {
+        let law = two_segment_law();
+        let ends = law.segment_ends();
+        let grid = law.time_grid();
+        assert_eq!(grid[10], ends[0]);
+        assert_eq!(grid[20], ends[1]);
+        assert_eq!(*grid.last().unwrap(), law.duration());
+        // The joint belongs to the segment that starts there.
+        assert_abs_diff_eq!(law.eval(1.0).1, -0.5, epsilon = VEL_TOL);
+    }
+
+    #[test]
+    fn zero_duration_segment_adds_no_points() {
+        let law = InputLaw {
+            segments: vec![
+                Segment::Linear {
+                    duration: 0.0,
+                    steps: 5,
+                    displacement: 1.0,
+                },
+                Segment::Linear {
+                    duration: 1.0,
+                    steps: 2,
+                    displacement: 1.0,
+                },
+            ],
+        };
+        let grid = law.time_grid();
+        assert_eq!(grid, vec![0.0, 0.5, 1.0]);
     }
 }
