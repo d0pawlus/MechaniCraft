@@ -38,6 +38,9 @@ ENDSAM
 - Ustalone przy imporcie (Task 6): nagłówek `CREATORTYPE_PRO` (token bez dwukropka na wcięciu 0) zamyka bloki, więc `ELEMGROUPS`, `DOFLIST`, `INPUT` są korzeniami drzewa. `FIXAXIS` węzła: 1 = x, 2 = y; kąta: 4. W `MOTIONBLOCK` krzywe (`CLINEAR`, `CSINQ`, `CMOTIONFILE`) leżą obok `CURVELIST`. Wejście `KIND:1` działa na element: `ROTMOTOR` to obrót względny, a `BEAM` z `ELONGATION:1` to wydłużenie belki (np. `BED.SAM`, wymaga wsparcia w `mc-core`).
 - Blok `LINETYPE<n>:` (styl rysowania) bywa zapisany ze stałym wcięciem 1 wewnątrz bloku elementu (`SCS.sam`) i ma własny `ENDOBJ`. Parser pomija go w całości.
 
+- Obciążenia (ustalone przy planowaniu fazy 2, z przykładów i pomocy): masa skupiona w węźle to blok `MASS:` z kluczem `MASSVALUE` wewnątrz `DOFLIST/NODE`. `BEAM` (i `SLIDER`) mają `M` (masa), `XL` (położenie środka masy jako ułamek długości od `N1`, 0–1) i `J` (moment bezwładności względem środka masy). `HINGE` i `ROTMOTOR` mają `J1`, `J2` o nieustalonym znaczeniu. Blok `GRAVITY:` ma `VALUE` (m/s²) i `ANGLE` (kierunek wektora w radianach, −π/2 to w dół); `POSX`, `POSY` to tylko położenie symbolu na rysunku. Brak bloku oznacza brak grawitacji.
+- Siła zewnętrzna to `FORCEBLOCK:` wewnątrz `DOFLIST/NODE` (`EDNR` = numer węzła, `ISTORQUE`, `DISABLED`). Definicję niesie dziecko `FORCEANYARG:`: `FNAME` (plik, zwykle pusty), `ARGTYPE` i `EDNR` (2 = węzeł, 1 = element), `ARGPROP` (np. `X`, `Y`, `A1`) oraz `TABLE:` z wierszami `argument wartość kąt` (kąt bezwzględny w radianach). Zewnętrzne `ARGTYPE` bloku bywa różne od wewnętrznego, więc czytamy tylko wewnętrzne.
+
 ## 3. Architektura docelowa
 
 ```
@@ -78,3 +81,14 @@ Każda faza ma osobny plan implementacji w `docs/superpowers/plans/`.
 - A. J. Klein Breteler, *Kinematic optimization of mechanisms, a finite element approach*, praca doktorska, Delft 1987.
 - A. L. Schwab, J. P. Meijaard, *The belt, gear, bearing and hinge as special finite elements…*, IFToMM 1999.
 - J. B. Jonker, *A finite element dynamic analysis of spatial mechanisms with flexible links*, 1989 (dalsze rozwinięcie).
+
+## 7. Kinetostatyka (faza 2): decyzje projektowe
+
+- **Metoda.** Analiza quasi-statyczna na gotowej trajektorii kinematycznej, bez całkowania w czasie. W każdym stanie rozwiązujemy równanie mocy wirtualnych `Dᵀσ = f_zew + f_graw − f_bezwł` na współrzędnych swobodnych, gdzie `D = ∂e/∂q` to ten sam jakobian modów co w solverze kinematyki (wspólny kod w `mc-core`, `ModeSystem`). Niewiadome to naprężenia uogólnione `σ` modów sztywnych i napędzanych. Mody swobodne nie przenoszą obciążenia (`σ = 0`), bo sprężyny, tłumiki i tarcie przychodzą w fazie 5.
+- **Reakcje.** Po wyznaczeniu `σ` reakcja na współrzędnej zablokowanej `k` to `r_k = (Dᵀσ)_k + f_bezwł,k − f_zew,k − f_graw,k`, czyli siła (albo moment) wywierana przez podporę na mechanizm.
+- **Znaki.** `σ` modu długości belki to siła normalna (dodatnia przy rozciąganiu, jak w SAM). Napęd: siła lub moment napędowy to `−σ` modu napędzanego (moment, który napęd przykłada do kąta `A2` względem `A1`), a moc napędu to `−σ · ė`. Zgodność znaków z SAM sprawdzi wyrocznia eksportu.
+- **Bezwładność.** Masa skupiona w węźle działa tylko translacyjnie. Masa członu leży w punkcie `(1−XL)·p + XL·q`, a moment bezwładności `J` działa na kąt prostej członu `α = atan2(q − p)`, z członem konwekcyjnym w `α̈`. Suwak z masą poza węzłem `N1` (`XL ≠ 0`) oraz `J1`, `J2` przegubów i napędów są na razie nieobsługiwane (czytelny błąd).
+- **Siły zewnętrzne.** Tablica `argument → (wartość, kąt)` interpolowana liniowo, poza zakresem stała (wartości skrajne). Argument: czas albo współrzędna `X`/`Y` węzła w bieżącym stanie. Momenty zewnętrzne (`ISTORQUE:1`), siły z pliku i argumenty elementowe są nieobsługiwane.
+- **Crate.** `mc-kineto` zależy od `mc-core`. `mc-samfile` dostaje `import_project` (mechanizm i obciążenia), a `import_sam` pozostaje bez zmian.
+- **Wyrocznia.** Eksporty wyników z SAM trafiają do `fixtures/sam-exports/` (tylko eksporty, nigdy pliki projektów). Test porównujący pomija się, gdy katalog nie ma eksportów.
+
