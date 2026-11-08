@@ -3,7 +3,7 @@
 use nalgebra::{DMatrix, DVector};
 use thiserror::Error;
 
-use crate::model::Mechanism;
+use crate::model::{Mechanism, ModelError};
 use crate::modes::{ModeEval, ModeRole, element_modes, mode_roles};
 
 /// Convergence threshold on the infinity norm of the residual.
@@ -32,6 +32,8 @@ pub struct Trajectory {
 pub enum SolveError {
     #[error("system is not square: {equations} equations, {unknowns} unknowns")]
     NotSquare { equations: usize, unknowns: usize },
+    #[error("invalid mechanism: {0}")]
+    InvalidModel(ModelError),
     #[error("mechanism has no inputs")]
     NoInputs,
     #[error("inputs have different time grids")]
@@ -122,7 +124,12 @@ impl Problem<'_> {
         for iteration in 0..=MAX_ITERATIONS {
             let a = self.assemble(q, &zeros);
             let r = &a.value - target;
-            let norm = r.amax();
+            // `amax` ignores NaN, so check every entry first.
+            let norm = if r.iter().all(|v| v.is_finite()) {
+                r.amax()
+            } else {
+                f64::NAN
+            };
             if !norm.is_finite() || (norm >= NEWTON_TOL && iteration == MAX_ITERATIONS) {
                 return Err(SolveError::NoConvergence {
                     step,
@@ -168,9 +175,11 @@ impl Problem<'_> {
 /// Solves position, velocity and acceleration at every time point of the
 /// input grid.
 ///
-/// Structural problems return `Err`. A failure at step `k` is stored in
+/// The model is validated first ([`Mechanism::validate`]). Structural
+/// problems return `Err`. A failure at step `k` is stored in
 /// [`Trajectory::failure`] and `states` then holds steps `0..k`.
 pub fn analyze(mech: &Mechanism) -> Result<Trajectory, SolveError> {
+    mech.validate().map_err(SolveError::InvalidModel)?;
     if mech.inputs.is_empty() {
         return Err(SolveError::NoInputs);
     }
@@ -265,4 +274,65 @@ fn solve_step(
     let conv = problem.assemble(&q, &qd).conv;
     let qdd = problem.scatter(&problem.solve(&jacobian, &(acc - conv), step, t)?, n);
     Ok(State { t, q, qd, qdd })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{CoordId, ElementKind, MechanismBuilder};
+    use mc_motion::{InputLaw, Segment};
+
+    fn actuator(displacement: f64) -> Mechanism {
+        let mut b = MechanismBuilder::new();
+        b.node(1, 0.0, 0.0, true, true)
+            .node(2, 1.0, 0.0, false, true)
+            .angle(1001, 0.0, false)
+            .angle(1002, 0.0, false)
+            .beam(1, 1, 2, 1001, 1002)
+            .input(
+                1,
+                InputLaw {
+                    segments: vec![Segment::Linear {
+                        duration: 1.0,
+                        steps: 4,
+                        displacement,
+                    }],
+                },
+            );
+        b.build().unwrap()
+    }
+
+    #[test]
+    fn invalid_coord_id_is_an_error_not_a_panic() {
+        let mut mech = actuator(0.1);
+        if let ElementKind::Beam { a, .. } = &mut mech.elements[0].kind {
+            *a = CoordId(999);
+        }
+        assert_eq!(
+            analyze(&mech).unwrap_err(),
+            SolveError::InvalidModel(ModelError::InvalidCoordId { element: 1 })
+        );
+    }
+
+    #[test]
+    fn unknown_input_element_is_an_error_not_a_panic() {
+        let mut mech = actuator(0.1);
+        mech.inputs[0].element_nr = 42;
+        assert_eq!(
+            analyze(&mech).unwrap_err(),
+            SolveError::InvalidModel(ModelError::UnknownInputElement(42))
+        );
+    }
+
+    #[test]
+    fn nan_residual_is_no_convergence() {
+        let mech = actuator(f64::NAN);
+        let traj = analyze(&mech).unwrap();
+        assert!(
+            matches!(traj.failure, Some(SolveError::NoConvergence { .. })),
+            "got {:?}",
+            traj.failure
+        );
+        assert!(traj.states.is_empty());
+    }
 }

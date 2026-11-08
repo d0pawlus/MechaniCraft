@@ -152,7 +152,9 @@ fn rotation_mode(mech: &Mechanism, a: CoordId, b: CoordId, x: &[f64]) -> ModeEva
 ///
 /// Beams and sliders return three modes (length, bending at node 1, bending
 /// at node 2); hinges and rotational motors return one. `q` and `qd` are
-/// indexed by [`CoordId`].
+/// indexed by [`CoordId`] and must satisfy `q.len() == qd.len() ==
+/// mech.coords.len()`; [`crate::analyze`] validates the model but this
+/// function does not check lengths.
 pub fn element_modes(mech: &Mechanism, el: &Element, q: &[f64], qd: &[f64]) -> Vec<ModeEval> {
     match &el.kind {
         ElementKind::Beam { p, q: qn, a, b } | ElementKind::Slider { p, q: qn, a, b } => {

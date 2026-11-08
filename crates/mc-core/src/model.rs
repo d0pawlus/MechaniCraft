@@ -96,6 +96,47 @@ impl Mechanism {
         self.find(CoordLabel::Angle(nr))
     }
 
+    /// Checks the structural invariants that [`MechanismBuilder::build`]
+    /// guarantees, for mechanisms assembled by hand from the public fields.
+    ///
+    /// Verifies that every element refers to existing coordinates, element
+    /// numbers are unique, every input targets exactly one element and no
+    /// element has two inputs, and all initial coordinate values are finite.
+    pub fn validate(&self) -> Result<(), ModelError> {
+        for (i, c) in self.coords.iter().enumerate() {
+            if !c.value0.is_finite() {
+                return Err(ModelError::NonFiniteCoordinate(i));
+            }
+        }
+        let mut seen = HashSet::new();
+        for el in &self.elements {
+            if !seen.insert(el.nr) {
+                return Err(ModelError::DuplicateElement(el.nr));
+            }
+            let ids: Vec<CoordId> = match &el.kind {
+                ElementKind::Beam { p, q, a, b } | ElementKind::Slider { p, q, a, b } => {
+                    vec![p[0], p[1], q[0], q[1], *a, *b]
+                }
+                ElementKind::Hinge { a, b, .. } | ElementKind::RotMotor { a, b, .. } => {
+                    vec![*a, *b]
+                }
+            };
+            if ids.iter().any(|id| id.0 >= self.coords.len()) {
+                return Err(ModelError::InvalidCoordId { element: el.nr });
+            }
+        }
+        let mut driven = HashSet::new();
+        for input in &self.inputs {
+            if !seen.contains(&input.element_nr) {
+                return Err(ModelError::UnknownInputElement(input.element_nr));
+            }
+            if !driven.insert(input.element_nr) {
+                return Err(ModelError::DuplicateInput(input.element_nr));
+            }
+        }
+        Ok(())
+    }
+
     fn find(&self, label: CoordLabel) -> Option<CoordId> {
         self.coords
             .iter()
@@ -121,6 +162,12 @@ pub enum ModelError {
     UnknownInputElement(u32),
     #[error("beam or slider {0} has zero length in its initial configuration")]
     ZeroLengthBeam(u32),
+    #[error("more than one input on element {0}")]
+    DuplicateInput(u32),
+    #[error("element {element} refers to a coordinate that does not exist")]
+    InvalidCoordId { element: u32 },
+    #[error("coordinate {0} has a non-finite initial value")]
+    NonFiniteCoordinate(usize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -274,7 +321,7 @@ impl MechanismBuilder {
     /// Validates the declarations and resolves them to a [`Mechanism`].
     ///
     /// Checks run in this order: duplicates, references, zero-length
-    /// beams and sliders, inputs.
+    /// beams and sliders, inputs, finite coordinates.
     pub fn build(&self) -> Result<Mechanism, ModelError> {
         self.check_duplicates()?;
         self.check_references()?;
@@ -353,7 +400,11 @@ impl MechanismBuilder {
     }
 
     fn check_inputs(&self) -> Result<(), ModelError> {
+        let mut seen = HashSet::new();
         for input in &self.inputs {
+            if !seen.insert(input.element_nr) {
+                return Err(ModelError::DuplicateInput(input.element_nr));
+            }
             self.elements
                 .iter()
                 .find(|e| e.nr() == input.element_nr)
@@ -445,11 +496,13 @@ impl MechanismBuilder {
             elements.push(Element { nr: e.nr(), kind });
         }
 
-        Ok(Mechanism {
+        let mech = Mechanism {
             coords,
             elements,
             inputs: self.inputs.clone(),
-        })
+        };
+        mech.validate()?;
+        Ok(mech)
     }
 }
 
@@ -541,5 +594,47 @@ mod tests {
         assert_eq!(m.angle(1005).map(|id| id.0), Some(10));
         assert_eq!(m.node(9), None);
         assert_eq!(m.angle(9999), None);
+    }
+
+    #[test]
+    fn rejects_duplicate_input() {
+        let mut b = slider_crank_builder();
+        b.input(3, drive_law());
+        assert_eq!(b.build().unwrap_err(), ModelError::DuplicateInput(3));
+    }
+
+    #[test]
+    fn rejects_non_finite_coordinate() {
+        let mut b = MechanismBuilder::new();
+        b.node(1, 0.0, 0.0, true, true)
+            .node(2, f64::NAN, 0.0, false, false)
+            .angle(1001, 0.0, false)
+            .angle(1002, 0.0, false)
+            .beam(1, 1, 2, 1001, 1002);
+        assert_eq!(b.build().unwrap_err(), ModelError::NonFiniteCoordinate(2));
+    }
+
+    #[test]
+    fn validate_rejects_hand_built_problems() {
+        let good = slider_crank_builder().build().unwrap();
+        assert_eq!(good.validate(), Ok(()));
+
+        let mut bad = good.clone();
+        if let ElementKind::Beam { a, .. } = &mut bad.elements[0].kind {
+            *a = CoordId(999);
+        }
+        assert_eq!(bad.validate(), Err(ModelError::InvalidCoordId { element: 1 }));
+
+        let mut bad = good.clone();
+        bad.inputs[0].element_nr = 77;
+        assert_eq!(bad.validate(), Err(ModelError::UnknownInputElement(77)));
+
+        let mut bad = good.clone();
+        bad.inputs.push(bad.inputs[0].clone());
+        assert_eq!(bad.validate(), Err(ModelError::DuplicateInput(3)));
+
+        let mut bad = good.clone();
+        bad.elements[1].nr = 1;
+        assert_eq!(bad.validate(), Err(ModelError::DuplicateElement(1)));
     }
 }
