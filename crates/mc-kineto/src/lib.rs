@@ -7,6 +7,9 @@
 
 pub mod forces;
 pub mod loads;
+pub mod solve;
+
+pub use solve::{ForceState, ForceTrajectory, KinetoError, StressLabel, kinetostatics};
 
 pub use forces::{applied_forces, inertia_forces};
 pub use loads::{
