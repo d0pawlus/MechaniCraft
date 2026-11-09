@@ -109,6 +109,19 @@ ELEMGROUPS:
 ENDSAM
 ";
 
+/// Slider-crank with a mass on node 3 and gravity pointing down.
+fn slider_crank_loaded() -> String {
+    SLIDER_CRANK
+        .replace(
+            "  X:0.4\n  Y:0\n",
+            "  X:0.4\n  Y:0\n  MASS:\n   MASSVALUE:3\n",
+        )
+        .replace(
+            "WCS:\n",
+            "GRAVITY:\n VALUE:9.81\n ANGLE:-1.5707963267948966\nWCS:\n",
+        )
+}
+
 fn write_file(dir: &Path, name: &str, text: &str) {
     fs::write(dir.join(name), text).unwrap();
 }
@@ -294,4 +307,57 @@ fn analyze_partial_result_exits_with_2() {
     let rows = csv.lines().count();
     assert!(rows >= 2 && rows < 38, "rows = {rows}");
     assert!(csv.starts_with("step,t,X1,Y1"));
+}
+
+#[test]
+fn analyze_forces_adds_columns() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("loaded.sam");
+    fs::write(&input, slider_crank_loaded()).unwrap();
+    let out = dir.path().join("out.csv");
+
+    let output = run(&["analyze", input.to_str().unwrap(), "--forces", "-o", out.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+
+    let csv = fs::read_to_string(&out).unwrap();
+    let lines: Vec<&str> = csv.split('\n').collect();
+    assert_eq!(lines.len(), 39);
+    assert!(lines[0].ends_with(",DRV3,PWR3,RX1,RY1,RY3,RA1005,N1,N2"), "header = {}", lines[0]);
+    let width = lines[0].split(',').count();
+    for row in &lines[1..38] {
+        let cells: Vec<&str> = row.split(',').collect();
+        assert_eq!(cells.len(), width);
+        for cell in cells {
+            assert!(cell.parse::<f64>().unwrap().is_finite(), "cell = {cell}");
+        }
+    }
+}
+
+#[test]
+fn analyze_without_forces_is_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("loaded.sam");
+    fs::write(&input, slider_crank_loaded()).unwrap();
+
+    let output = run(&["analyze", input.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    let header = stdout_of(&output).lines().next().unwrap().to_owned();
+    assert!(!header.contains("DRV"), "header = {header}");
+    assert!(header.ends_with(",AY3"), "header = {header}");
+}
+
+#[test]
+fn check_runs_kinetostatics() {
+    let dir = TempDir::new().unwrap();
+    let text = SLIDER_CRANK.replace(
+        "  X:0.4\n  Y:0\n",
+        "  X:0.4\n  Y:0\n  FORCEBLOCK:\n   EDNR:3\n   ISTORQUE:1\n   ARGTYPE:2\n   DISABLED:0\n",
+    );
+    write_file(dir.path(), "torque.sam", &text);
+
+    let output = run(&["check", dir.path().to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    let stdout = stdout_of(&output);
+    assert!(stdout.contains("UNSUPPORTED"), "stdout = {stdout}");
+    assert!(stdout.contains("torque"), "stdout = {stdout}");
 }
