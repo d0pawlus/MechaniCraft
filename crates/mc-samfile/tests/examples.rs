@@ -7,7 +7,8 @@
 use std::path::PathBuf;
 
 use mc_core::analyze;
-use mc_samfile::import_sam;
+use mc_kineto::ForceArg;
+use mc_samfile::{import_project, import_sam};
 
 fn examples_dir() -> Option<PathBuf> {
     let dir = std::env::var_os("SAM_EXAMPLES_DIR")
@@ -102,3 +103,52 @@ fn phase1_examples_analyze() {
     assert!(failures.is_empty(), "failing examples: {failures:#?}");
 }
 
+
+const PHASE1_EXAMPLES: [&str; 10] = [
+    "SLCR.SAM",
+    "6BAR.SAM",
+    "CRRK.SAM",
+    "ORTHO.SAM",
+    "DYAD.sam",
+    "SCS.sam",
+    "TRFR.SAM",
+    "QKRT.SAM",
+    "DXFDEMO (detached).SAM",
+    "BED.SAM",
+];
+
+#[test]
+fn phase1_examples_import_loads() {
+    let Some(dir) = examples_dir() else { return };
+    let mut failures = Vec::new();
+    for name in PHASE1_EXAMPLES {
+        let result = std::fs::read(dir.join(name))
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| import_project(&bytes).map_err(|e| format!("import: {e}")));
+        if let Err(e) = result {
+            failures.push(format!("{name}: {e}"));
+        }
+    }
+    assert!(failures.is_empty(), "failing examples: {failures:#?}");
+}
+
+#[test]
+fn trfr_has_node_masses_and_gravity() {
+    let Some(dir) = examples_dir() else { return };
+    let project = import_project(&std::fs::read(dir.join("TRFR.SAM")).unwrap()).unwrap();
+    assert_eq!(project.loads.node_masses.len(), 2);
+    assert!(project.loads.gravity.is_some_and(|g| g.value > 0.0));
+}
+
+#[test]
+fn scs_force_depends_on_node_y() {
+    let Some(dir) = examples_dir() else { return };
+    let project = import_project(&std::fs::read(dir.join("SCS.sam")).unwrap()).unwrap();
+    let count = project
+        .loads
+        .forces
+        .iter()
+        .filter(|f| matches!(f.arg, ForceArg::NodeY(_)))
+        .count();
+    assert_eq!(count, 1);
+}

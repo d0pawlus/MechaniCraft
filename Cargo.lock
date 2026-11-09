@@ -275,6 +275,7 @@ name = "mc-samfile"
 version = "0.1.0"
 dependencies = [
  "mc-core",
+ "mc-kineto",
  "mc-motion",
  "thiserror",
 ]
