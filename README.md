@@ -12,6 +12,11 @@ Współczesne, wieloplatformowe narzędzie w Ruście do analizy i (docelowo) syn
 - Kinetostatyka (analiza quasi-statyczna): moment lub siła napędowa i moc każdego wejścia, reakcje na współrzędnych zablokowanych, siły normalne belek.
 - Import `.SAM` (podzbiór); nieobsługiwana treść daje czytelny błąd z numerem linii.
 
+Ograniczenia (szczegóły i plan prac w [backlogu](docs/backlog.md)):
+- Bezwładność obrotowa suwaka może dać błąd osobliwości dla konfiguracji, która fizycznie jest regularna (suwak przechodzi przez węzeł o zerowej długości).
+- Brak pełnych testów części ścieżek błędów kinetostatyki i importu obciążeń.
+- Przy błędzie solvera sił `analyze --forces` zapisuje wynik częściowy (kod wyjścia `2`).
+
 ## Użycie
 ```bash
 cargo test --workspace
@@ -39,3 +44,4 @@ Testy na przykładach SAM czytają je z `SAM_EXAMPLES_DIR` (domyślnie `C:\Users
 - [Projekt i mapa drogowa](docs/superpowers/specs/2026-11-08-mechanismcraft-design.md)
 - [Plan fazy 1](docs/superpowers/plans/2026-11-08-phase1-kinematic-core.md)
 - [Plan fazy 2](docs/superpowers/plans/2026-11-09-phase2-kinetostatics.md)
+- [Backlog fazy 1](docs/backlog-phase1.md) i [backlog fazy 2](docs/backlog.md)
