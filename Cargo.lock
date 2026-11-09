@@ -238,6 +238,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "mc-core",
+ "mc-kineto",
  "mc-samfile",
  "tempfile",
 ]
@@ -247,6 +248,17 @@ name = "mc-core"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "mc-motion",
+ "nalgebra",
+ "thiserror",
+]
+
+[[package]]
+name = "mc-kineto"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "mc-core",
  "mc-motion",
  "nalgebra",
  "thiserror",
@@ -264,6 +276,7 @@ name = "mc-samfile"
 version = "0.1.0"
 dependencies = [
  "mc-core",
+ "mc-kineto",
  "mc-motion",
  "thiserror",
 ]

@@ -4,7 +4,7 @@ use nalgebra::{DMatrix, DVector};
 use thiserror::Error;
 
 use crate::model::{Mechanism, ModelError};
-use crate::modes::{ModeEval, ModeRole, element_modes, mode_roles};
+use crate::system::ModeSystem;
 
 /// Convergence threshold on the infinity norm of the residual.
 const NEWTON_TOL: f64 = 1e-12;
@@ -44,74 +44,7 @@ pub enum SolveError {
     NoConvergence { step: usize, t: f64, residual: f64 },
 }
 
-/// One equation: a mode that is rigid or driven.
-struct Equation {
-    element: usize,
-    mode: usize,
-    /// `Some(i)` when driven by `mech.inputs[i]`, `None` when held at zero.
-    input: Option<usize>,
-}
-
-/// Mode values, Jacobian over the free coordinates and convective terms.
-struct Assembly {
-    value: DVector<f64>,
-    jacobian: DMatrix<f64>,
-    conv: DVector<f64>,
-}
-
-struct Problem<'a> {
-    mech: &'a Mechanism,
-    equations: Vec<Equation>,
-    /// Column of each coordinate in the Jacobian, `None` for fixed ones.
-    column: Vec<Option<usize>>,
-    free: Vec<usize>,
-}
-
-impl Problem<'_> {
-    /// Targets `(u, v, a)` of every equation at time `t`.
-    fn targets(&self, t: f64) -> [DVector<f64>; 3] {
-        let n = self.equations.len();
-        let mut out = [DVector::zeros(n), DVector::zeros(n), DVector::zeros(n)];
-        for (row, eq) in self.equations.iter().enumerate() {
-            if let Some(i) = eq.input {
-                let (u, v, a) = self.mech.inputs[i].law.eval(t);
-                out[0][row] = u;
-                out[1][row] = v;
-                out[2][row] = a;
-            }
-        }
-        out
-    }
-
-    /// Evaluates the modes at position `q` and velocity `qd`.
-    fn assemble(&self, q: &[f64], qd: &[f64]) -> Assembly {
-        let n = self.equations.len();
-        let mut a = Assembly {
-            value: DVector::zeros(n),
-            jacobian: DMatrix::zeros(n, self.free.len()),
-            conv: DVector::zeros(n),
-        };
-        // Equations are ordered by element, so each element is evaluated once.
-        let mut current: Option<(usize, Vec<ModeEval>)> = None;
-        for (row, eq) in self.equations.iter().enumerate() {
-            if current.as_ref().is_none_or(|(el, _)| *el != eq.element) {
-                let modes = element_modes(self.mech, &self.mech.elements[eq.element], q, qd);
-                current = Some((eq.element, modes));
-            }
-            if let Some((_, modes)) = &current {
-                let mode = &modes[eq.mode];
-                a.value[row] = mode.value;
-                a.conv[row] = mode.conv;
-                for &(c, g) in &mode.grad {
-                    if let Some(col) = self.column[c.0] {
-                        a.jacobian[(row, col)] += g;
-                    }
-                }
-            }
-        }
-        a
-    }
-
+impl ModeSystem<'_> {
     /// Newton iteration on the free coordinates of `q`.
     fn newton(
         &self,
@@ -141,7 +74,7 @@ impl Problem<'_> {
                 return Ok(());
             }
             let dq = self.solve(&a.jacobian, &r, step, t)?;
-            for (col, &coord) in self.free.iter().enumerate() {
+            for (col, &coord) in self.free().iter().enumerate() {
                 q[coord] -= dq[col];
             }
         }
@@ -165,7 +98,7 @@ impl Problem<'_> {
     /// Expands a solution over the free coordinates to all coordinates.
     fn scatter(&self, x: &DVector<f64>, len: usize) -> Vec<f64> {
         let mut out = vec![0.0; len];
-        for (col, &coord) in self.free.iter().enumerate() {
+        for (col, &coord) in self.free().iter().enumerate() {
             out[coord] = x[col];
         }
         out
@@ -188,41 +121,7 @@ pub fn analyze(mech: &Mechanism) -> Result<Trajectory, SolveError> {
         return Err(SolveError::InputGridMismatch);
     }
 
-    let equations: Vec<Equation> = mode_roles(mech)
-        .into_iter()
-        .filter_map(|(element, mode, role)| match role {
-            ModeRole::Free => None,
-            ModeRole::Rigid => Some(Equation {
-                element,
-                mode,
-                input: None,
-            }),
-            ModeRole::Driven(i) => Some(Equation {
-                element,
-                mode,
-                input: Some(i),
-            }),
-        })
-        .collect();
-    let free: Vec<usize> = (0..mech.coords.len())
-        .filter(|&i| !mech.coords[i].fixed)
-        .collect();
-    if equations.len() != free.len() {
-        return Err(SolveError::NotSquare {
-            equations: equations.len(),
-            unknowns: free.len(),
-        });
-    }
-    let mut column = vec![None; mech.coords.len()];
-    for (col, &coord) in free.iter().enumerate() {
-        column[coord] = Some(col);
-    }
-    let problem = Problem {
-        mech,
-        equations,
-        column,
-        free,
-    };
+    let problem = ModeSystem::new(mech)?;
 
     let mut states: Vec<State> = Vec::with_capacity(grid.len());
     for (step, &t) in grid.iter().enumerate() {
@@ -243,12 +142,12 @@ pub fn analyze(mech: &Mechanism) -> Result<Trajectory, SolveError> {
 }
 
 fn solve_step(
-    problem: &Problem,
+    problem: &ModeSystem,
     prev: Option<&State>,
     step: usize,
     t: f64,
 ) -> Result<State, SolveError> {
-    let coords = &problem.mech.coords;
+    let coords = &problem.mechanism().coords;
     let n = coords.len();
     let mut q: Vec<f64> = match prev {
         Some(p) => {
