@@ -143,9 +143,9 @@ fn playback_controls(ui: &mut egui::Ui, playback: &mut Playback) {
     };
     ui.horizontal(|ui| {
         let text = if playback.playing {
-            "⏸ Pause"
+            "Pause"
         } else {
-            "▶ Play"
+            "Play"
         };
         if ui.button(text).clicked() {
             playback.playing = !playback.playing;
