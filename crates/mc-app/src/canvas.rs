@@ -27,7 +27,6 @@ pub fn paint(ui: &mut egui::Ui, doc: &Document, playback: &Playback, path_node: 
     let to_pos = |p: [f64; 2]| {
         let s = vt.to_screen(p);
         // Screen coordinates fit comfortably in f32.
-        #[allow(clippy::cast_possible_truncation)]
         Pos2::new(s[0] as f32, s[1] as f32)
     };
     let visuals = ui.visuals();

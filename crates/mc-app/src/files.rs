@@ -30,15 +30,16 @@ impl Inbox {
     }
 }
 
-fn dialog_filters<T>(add: impl FnOnce(&'static str, &[&'static str]) -> T) -> T {
-    add("SAM project", &["sam", "SAM"])
-}
+/// Name and extensions of the open-dialog filter.
+const FILTER_NAME: &str = "SAM project";
+const FILTER_EXT: [&str; 2] = ["sam", "SAM"];
 
 /// Shows the open-file dialog; the chosen file arrives in `inbox`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn pick_file(inbox: &Inbox, _ctx: &egui::Context) {
-    let Some(path) =
-        dialog_filters(|name, ext| rfd::FileDialog::new().add_filter(name, ext)).pick_file()
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter(FILTER_NAME, &FILTER_EXT)
+        .pick_file()
     else {
         return;
     };
@@ -47,10 +48,7 @@ pub fn pick_file(inbox: &Inbox, _ctx: &egui::Context) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn read_path(path: &std::path::Path) -> Loaded {
-    let name = path.file_name().map_or_else(
-        || path.display().to_string(),
-        |n| n.to_string_lossy().into_owned(),
-    );
+    let name = display_name(path);
     std::fs::read(path)
         .map(|bytes| (name.clone(), bytes))
         .map_err(|err| format!("{name}: {err}"))
@@ -59,7 +57,7 @@ fn read_path(path: &std::path::Path) -> Loaded {
 /// Shows the open-file dialog; the chosen file arrives in `inbox`.
 #[cfg(target_arch = "wasm32")]
 pub fn pick_file(inbox: &Inbox, ctx: &egui::Context) {
-    let dialog = dialog_filters(|name, ext| rfd::AsyncFileDialog::new().add_filter(name, ext));
+    let dialog = rfd::AsyncFileDialog::new().add_filter(FILTER_NAME, &FILTER_EXT);
     let inbox = inbox.clone();
     let ctx = ctx.clone();
     wasm_bindgen_futures::spawn_local(async move {
@@ -103,7 +101,11 @@ pub fn receive_dropped(inbox: &Inbox, ctx: &egui::Context, files: Vec<egui::Drop
 }
 
 fn file_name(file: &dyn egui::DroppedFile) -> String {
-    let path = file.path();
+    display_name(file.path())
+}
+
+/// File name of `path`, or the whole path when it has none.
+fn display_name(path: &std::path::Path) -> String {
     path.file_name().map_or_else(
         || path.display().to_string(),
         |n| n.to_string_lossy().into_owned(),

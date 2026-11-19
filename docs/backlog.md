@@ -31,3 +31,14 @@ Odłożone uwagi z review fazy 2 (kinetostatyka). Poprawki wykonane w trakcie fa
 - Historia commitów: poprawki T1 (`dfcd5ef`) i T3 (`4db8816`) dodają pliki brakujące w commitach `25b3149` i `91c623a`, więc te commity nie budują się same (zagrożenie dla bisect). Rozważyć squash każdej pary przed scaleniem. Gałąź ma 9 commitów kodu dla 7 zadań.
 - Proces: stopki `Co-Authored-By` w commitach (w tym `74d36e6`) wskazują Sonnet 5.5 lub Haiku 5.5. Sprawdzić, czy odpowiadają faktycznym wykonawcom. Dotyczy to wyłącznie procesu, nie kodu.
 - Weryfikacja po scaleniu: w momencie T6 `crates/mc-cli/tests/cli.rs` miał niezacommitowane zmiany innego agenta (T7), więc pełny `cargo test --workspace` nie został zweryfikowany dla tego commitu. Uruchomić ponownie po scaleniu T7.
+
+## Faza 3
+
+Uwagi z review podglądu, odłożone.
+
+- `crates/mc-app/src/app.rs`, `receive_files`: pliki upuszczone na okno są czytane z `raw.dropped_files` w `ui()`. Jeśli egui wykona kilka przebiegów w jednej klatce, ten sam plik może zostać otwarty dwa razy. Przenieść odbiór do `App::logic` albo odfiltrować duplikaty.
+- `crates/mc-app/src/files.rs`, `pick_file` (desktop): blokujące `rfd::FileDialog` wewnątrz `ui()`. Na Linuksie (xdg-portal) okno przestaje się odświeżać, dopóki dialog jest otwarty. Użyć `AsyncFileDialog` na wątku i oddawać wynik przez `Inbox`.
+- `crates/mc-app/src/app.rs`, `plot` i `canvas::paint`: próbki kanału i tor węzła są liczone i alokowane w każdej klatce. Zapamiętać je dla pary (dokument, kanał lub węzeł). Bounds są już liczone raz przy wczytaniu.
+- `crates/mc-view/src/playback.rs`: `Playback` trzyma własną kopię czasów klatek. Przy przyszłym przeliczaniu dokumentu trzeba ją odbudować razem z nim, inaczej `frame()` wskaże klatki spoza trajektorii.
+- Lista kanałów w rozwijanym menu jest długa (każda współrzędna razy trzy pochodne). Pogrupować (węzły, kąty, siły) albo dodać filtr.
+- Kryterium fazy (`SLCR.SAM` z animacją i wykresem x(t)) trzeba sprawdzić na Windows z przykładami SAM. Droga `trunk serve` nie była uruchamiana.

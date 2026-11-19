@@ -26,6 +26,8 @@ pub struct ViewerApp {
     path_node: Option<u32>,
     error: Option<String>,
     inbox: Inbox,
+    /// Bumped on every opened document, so the plot forgets its zoom.
+    generation: u64,
 }
 
 impl Default for ViewerApp {
@@ -44,6 +46,7 @@ impl ViewerApp {
             path_node: None,
             error: None,
             inbox: Inbox::default(),
+            generation: 0,
         };
         app.open(DEMO_NAME, DEMO.as_bytes());
         app
@@ -60,6 +63,7 @@ impl ViewerApp {
                 self.path_node = doc.default_path_node();
                 self.error = None;
                 self.doc = Some(doc);
+                self.generation += 1;
             }
             Err(err) => self.error = Some(format!("{name}: {err}")),
         }
@@ -115,7 +119,8 @@ impl ViewerApp {
         let label = doc.label(channel);
         let samples = doc.samples(channel);
         let time = self.playback.time;
-        let response = Plot::new("channel_plot")
+        // A new id per document and channel starts with fitted bounds.
+        let response = Plot::new(("channel_plot", self.generation, channel))
             .x_axis_label("t [s]")
             .y_axis_label(label.clone())
             .show(ui, |plot| {

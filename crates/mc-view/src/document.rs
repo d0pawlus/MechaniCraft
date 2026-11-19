@@ -5,7 +5,7 @@ use mc_kineto::{ForceTrajectory, Loads, kinetostatics};
 use mc_samfile::{ImportError, Project, import_project, import_sam};
 use thiserror::Error;
 
-use crate::scene::Scene;
+use crate::scene::{Bounds, Scene, trajectory_bounds};
 
 /// Errors that prevent a project from being shown at all.
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -29,6 +29,7 @@ pub struct Document {
     /// reason is in `warnings`).
     pub forces: Option<ForceTrajectory>,
     pub scene: Scene,
+    pub(crate) bounds: Option<Bounds>,
     /// Problems that leave partial results, in human-readable form.
     pub warnings: Vec<String>,
 }
@@ -56,12 +57,14 @@ pub fn load(name: &str, bytes: &[u8]) -> Result<Document, LoadError> {
         None
     };
     let scene = Scene::from_mechanism(&project.mechanism);
+    let bounds = trajectory_bounds(&scene, &trajectory);
     Ok(Document {
         name: name.to_owned(),
         project,
         trajectory,
         forces,
         scene,
+        bounds,
         warnings,
     })
 }

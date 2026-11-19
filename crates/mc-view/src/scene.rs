@@ -1,6 +1,6 @@
 //! Drawable geometry of a mechanism: nodes, supports and links.
 
-use mc_core::{CoordId, CoordLabel, ElementKind, Mechanism};
+use mc_core::{CoordId, CoordLabel, ElementKind, Mechanism, Trajectory};
 
 use crate::document::Document;
 
@@ -115,6 +115,22 @@ impl Scene {
     }
 }
 
+/// Rectangle containing every node of `scene` in every state of `traj`.
+pub(crate) fn trajectory_bounds(scene: &Scene, traj: &Trajectory) -> Option<Bounds> {
+    traj.states
+        .iter()
+        .flat_map(|s| {
+            scene
+                .nodes
+                .iter()
+                .filter_map(move |n| point(&s.q, [n.x, n.y]))
+        })
+        .filter(|p| p[0].is_finite() && p[1].is_finite())
+        .fold(None, |acc: Option<Bounds>, p| {
+            Some(acc.map_or(Bounds::of_point(p), |b| b.including(p)))
+        })
+}
+
 fn point(q: &[f64], ids: [CoordId; 2]) -> Option<[f64; 2]> {
     Some([*q.get(ids[0].0)?, *q.get(ids[1].0)?])
 }
@@ -147,21 +163,9 @@ impl Document {
     }
 
     /// Rectangle containing every node in every frame; `None` without nodes
-    /// or states.
+    /// or states. Computed once when the document is loaded.
     pub fn bounds(&self) -> Option<Bounds> {
-        self.trajectory
-            .states
-            .iter()
-            .flat_map(|s| {
-                self.scene
-                    .nodes
-                    .iter()
-                    .filter_map(move |n| point(&s.q, [n.x, n.y]))
-            })
-            .filter(|p| p[0].is_finite() && p[1].is_finite())
-            .fold(None, |acc: Option<Bounds>, p| {
-                Some(acc.map_or(Bounds::of_point(p), |b| b.including(p)))
-            })
+        self.bounds
     }
 
     /// Path of node `nr` over all frames; empty for an unknown node.
