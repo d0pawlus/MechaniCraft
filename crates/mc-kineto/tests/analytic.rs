@@ -364,8 +364,16 @@ fn global_force_balance_slider_crank() {
         let scale = [lhs_x, lhs_y, ma[0], ma[1], rx, ry]
             .iter()
             .fold(1.0_f64, |m, v| m.max(v.abs()));
-        assert!((lhs_x - ma[0]).abs() <= 1e-9 * scale, "x balance at t={}", s.t);
-        assert!((lhs_y - ma[1]).abs() <= 1e-9 * scale, "y balance at t={}", s.t);
+        assert!(
+            (lhs_x - ma[0]).abs() <= 1e-9 * scale,
+            "x balance at t={}",
+            s.t
+        );
+        assert!(
+            (lhs_y - ma[1]).abs() <= 1e-9 * scale,
+            "y balance at t={}",
+            s.t
+        );
         assert!((f.reactions[ang] - f.driving[0]).abs() <= 1e-9 * scale);
     }
 }

@@ -30,7 +30,10 @@ fn examples_dir() -> Option<PathBuf> {
     if dir.is_dir() {
         Some(dir)
     } else {
-        eprintln!("skipping: SAM examples directory {} not found", dir.display());
+        eprintln!(
+            "skipping: SAM examples directory {} not found",
+            dir.display()
+        );
         None
     }
 }
@@ -38,7 +41,14 @@ fn examples_dir() -> Option<PathBuf> {
 fn load(
     dir: &std::path::Path,
     name: &str,
-) -> Result<(mc_samfile::Project, mc_core::Trajectory, mc_kineto::ForceTrajectory), String> {
+) -> Result<
+    (
+        mc_samfile::Project,
+        mc_core::Trajectory,
+        mc_kineto::ForceTrajectory,
+    ),
+    String,
+> {
     let bytes = std::fs::read(dir.join(name)).map_err(|e| format!("{name}: read: {e}"))?;
     let project = import_project(&bytes).map_err(|e| format!("{name}: import: {e}"))?;
     let traj = analyze(&project.mechanism).map_err(|e| format!("{name}: analyze: {e}"))?;
@@ -139,7 +149,10 @@ fn examples_with_loads_have_nonzero_driving() {
 
 #[test]
 fn sam_export_oracle_hook() {
-    let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/sam-exports"));
+    let dir = PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/sam-exports"
+    ));
     let has_exports = std::fs::read_dir(&dir)
         .map(|rd| {
             rd.flatten()

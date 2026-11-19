@@ -157,7 +157,10 @@ mod tests {
 
     fn assert_vec(got: &[f64], expect: &[(usize, f64)]) {
         for (i, v) in got.iter().enumerate() {
-            let e = expect.iter().find(|(k, _)| *k == i).map_or(0.0, |(_, e)| *e);
+            let e = expect
+                .iter()
+                .find(|(k, _)| *k == i)
+                .map_or(0.0, |(_, e)| *e);
             assert_abs_diff_eq!(*v, e, epsilon = 1e-12);
         }
     }
@@ -266,8 +269,7 @@ mod tests {
             forces: vec![NodalForce {
                 node: 2,
                 arg: ForceArg::Time,
-                table: ForceTable::new(vec![[0.0, 0.0, FRAC_PI_2], [2.0, 8.0, FRAC_PI_2]])
-                    .unwrap(),
+                table: ForceTable::new(vec![[0.0, 0.0, FRAC_PI_2], [2.0, 8.0, FRAC_PI_2]]).unwrap(),
             }],
             ..Loads::default()
         };

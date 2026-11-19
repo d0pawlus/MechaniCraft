@@ -111,7 +111,11 @@ fn four_bar(
         (bpt.0 + along * ux - h * uy, bpt.1 + along * uy + h * ux),
         (bpt.0 + along * ux + h * uy, bpt.1 + along * uy - h * ux),
     ];
-    let c = if cands[0].1 >= cands[1].1 { cands[0] } else { cands[1] };
+    let c = if cands[0].1 >= cands[1].1 {
+        cands[0]
+    } else {
+        cands[1]
+    };
     let ang = |p: (f64, f64), q: (f64, f64)| (q.1 - p.1).atan2(q.0 - p.0);
     let (a1, a2, a3) = (ang(a, bpt), ang(bpt, c), ang(c, d));
     let mut b = MechanismBuilder::new();

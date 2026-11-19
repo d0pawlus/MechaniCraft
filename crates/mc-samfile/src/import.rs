@@ -245,7 +245,10 @@ fn read_loads(tree: &SamTree) -> Result<Loads, ImportError> {
                 if let Some(mass) = child.get("MASS") {
                     let value = finite(mass, "MASSVALUE")?;
                     if value != 0.0 {
-                        loads.node_masses.push(NodeMass { node: nr, mass: value });
+                        loads.node_masses.push(NodeMass {
+                            node: nr,
+                            mass: value,
+                        });
                     }
                 }
                 for block in child.all("FORCEBLOCK") {
@@ -341,7 +344,10 @@ fn read_force(block: &SamNode, nr: u32) -> Result<Option<NodalForce>, ImportErro
         // Disabled forces do not act in SAM, so skipping them is faithful.
         return Ok(None);
     }
-    let unsupported = |what: String| SamError::Unsupported { what, line: block.line };
+    let unsupported = |what: String| SamError::Unsupported {
+        what,
+        line: block.line,
+    };
     let ednr: u32 = block.num("EDNR")?;
     if ednr != nr {
         return Err(unsupported(format!("FORCEBLOCK EDNR {ednr} in NODE {nr}")).into());
@@ -566,7 +572,10 @@ ENDSAM
         let line = line_of(&text, "   CTIME:0");
         assert_eq!(
             sam_err(&text),
-            SamError::BadNumber { key: "CTIME".into(), line }
+            SamError::BadNumber {
+                key: "CTIME".into(),
+                line
+            }
         );
     }
 
@@ -576,7 +585,10 @@ ENDSAM
         let line = line_of(&text, "   NSTEPS:0");
         assert_eq!(
             sam_err(&text),
-            SamError::BadNumber { key: "NSTEPS".into(), line }
+            SamError::BadNumber {
+                key: "NSTEPS".into(),
+                line
+            }
         );
     }
 
@@ -586,7 +598,10 @@ ENDSAM
         let line = line_of(&text, "  KIND:2");
         assert_eq!(
             sam_err(&text),
-            SamError::Unsupported { what: "input KIND 2".into(), line }
+            SamError::Unsupported {
+                what: "input KIND 2".into(),
+                line
+            }
         );
     }
 
@@ -631,21 +646,30 @@ ENDSAM
         let line = line_of(&text, " MOTIONBLOCK:");
         assert_eq!(
             sam_err(&text),
-            SamError::Missing { key: "CLINEAR".into(), line }
+            SamError::Missing {
+                key: "CLINEAR".into(),
+                line
+            }
         );
     }
 
     #[test]
     fn nonzero_axis_is_unsupported() {
-        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace("
+        let text = slider_crank_text("ROTMOTOR", "CLINEAR").replace(
+            "
   AXIS:0
-", "
+",
+            "
   AXIS:1
-");
+",
+        );
         let line = line_of(&text, "  AXIS:1");
         assert_eq!(
             sam_err(&text),
-            SamError::Unsupported { what: "input AXIS 1".into(), line }
+            SamError::Unsupported {
+                what: "input AXIS 1".into(),
+                line
+            }
         );
     }
 
@@ -667,7 +691,10 @@ ENDSAM
             let text = text.replacen(line_text, bad, 1);
             assert_eq!(
                 sam_err(&text),
-                SamError::BadNumber { key: key.into(), line },
+                SamError::BadNumber {
+                    key: key.into(),
+                    line
+                },
                 "key {key}"
             );
         }
@@ -679,7 +706,10 @@ ENDSAM
         let line = line_of(&text, "   NSTEPS:1000001");
         assert_eq!(
             sam_err(&text),
-            SamError::BadNumber { key: "NSTEPS".into(), line }
+            SamError::BadNumber {
+                key: "NSTEPS".into(),
+                line
+            }
         );
         let ok = slider_crank_text("ROTMOTOR", "CLINEAR").replace("NSTEPS:36", "NSTEPS:1000000");
         assert!(import_sam(ok.as_bytes()).is_ok());
@@ -826,8 +856,17 @@ ENDSAM
             "GRAVITY:\n VALUE:9.5\n ANGLE:-1.5\n POSX:1\n POSY:2\nWCS:\n",
         );
         let project = import_project(text.as_bytes()).unwrap();
-        assert_eq!(project.loads.node_masses, vec![NodeMass { node: 3, mass: 7.5 }]);
-        assert_eq!(project.loads.gravity, Some(Gravity { value: 9.5, angle: -1.5 }));
+        assert_eq!(
+            project.loads.node_masses,
+            vec![NodeMass { node: 3, mass: 7.5 }]
+        );
+        assert_eq!(
+            project.loads.gravity,
+            Some(Gravity {
+                value: 9.5,
+                angle: -1.5
+            })
+        );
     }
 
     #[test]
@@ -840,7 +879,12 @@ ENDSAM
         let project = import_project(text.as_bytes()).unwrap();
         assert_eq!(
             project.loads.element_inertias,
-            vec![ElementInertia { element: 1, mass: 3.0, cog: 0.4, inertia: 0.02 }]
+            vec![ElementInertia {
+                element: 1,
+                mass: 3.0,
+                cog: 0.4,
+                inertia: 0.02
+            }]
         );
     }
 

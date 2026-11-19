@@ -85,7 +85,10 @@ impl SamTree {
 /// Parsing stops at `ENDSAM`.
 pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     let text = String::from_utf8_lossy(bytes);
-    let mut lines = text.lines().enumerate().map(|(index, line)| (index + 1, line));
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .map(|(index, line)| (index + 1, line));
 
     match lines.next() {
         Some((_, line)) if line.trim_start_matches('\u{feff}').trim() == "SAMASCII" => {}
@@ -93,10 +96,13 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
     }
 
     let format_version = match lines.next() {
-        Some((line_no, line)) => line.trim().parse::<u32>().map_err(|_| SamError::BadNumber {
-            key: "format_version".to_owned(),
-            line: line_no,
-        })?,
+        Some((line_no, line)) => line
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| SamError::BadNumber {
+                key: "format_version".to_owned(),
+                line: line_no,
+            })?,
         None => {
             return Err(SamError::Missing {
                 key: "format_version".to_owned(),
@@ -184,7 +190,10 @@ pub fn parse_tree(bytes: &[u8]) -> Result<SamTree, SamError> {
         close_top(&mut stack, &mut root);
     }
 
-    Ok(SamTree { format_version, root })
+    Ok(SamTree {
+        format_version,
+        root,
+    })
 }
 
 /// Error for a skipped `LINETYPE<n>:` block that never reaches its `ENDOBJ`.
@@ -299,7 +308,10 @@ ENDSAM
         let node = tree.root[0].all("NODE").next().unwrap();
         assert_eq!(tree.root[0].all("NODE").count(), 1);
         assert_eq!(node.num::<f64>("X").unwrap(), -0.05);
-        assert_eq!(tree.root[0].get("ANGLE").unwrap().num::<u32>("NR").unwrap(), 1001);
+        assert_eq!(
+            tree.root[0].get("ANGLE").unwrap().num::<u32>("NR").unwrap(),
+            1001
+        );
     }
 
     #[test]
@@ -307,7 +319,10 @@ ENDSAM
         let tree = parse(EXCERPT).unwrap();
         let optimizations = beam_of(&tree).get("OPTIMIZATIONS").unwrap();
         assert_eq!(optimizations.rows.len(), 3);
-        assert_eq!(optimizations.rows[0], "0  0.00000000000000E+0000  0.00000000000000E+0000");
+        assert_eq!(
+            optimizations.rows[0],
+            "0  0.00000000000000E+0000  0.00000000000000E+0000"
+        );
     }
 
     #[test]
@@ -337,7 +352,10 @@ ENDSAM
     fn rejects_tab_indentation_with_line() {
         assert_eq!(
             parse("SAMASCII\n802\nNODE:\n\tX:1\nENDSAM\n").unwrap_err(),
-            SamError::Unsupported { what: "tab indentation".to_owned(), line: 4 }
+            SamError::Unsupported {
+                what: "tab indentation".to_owned(),
+                line: 4
+            }
         );
     }
 
@@ -359,7 +377,10 @@ ENDSAM
         assert_eq!(node.line, 3);
         assert_eq!(
             node.num::<u32>("NR").unwrap_err(),
-            SamError::Missing { key: "NR".to_owned(), line: 3 }
+            SamError::Missing {
+                key: "NR".to_owned(),
+                line: 3
+            }
         );
     }
 
@@ -395,7 +416,14 @@ ENDSAM
         let keys: Vec<&str> = tree.root.iter().map(|n| n.key.as_str()).collect();
         assert_eq!(
             keys,
-            ["BUILDNRREAD", "ELEMGROUPS", "DOFLIST", "INPUT", "WCS", "GRAPHOPTIONS"]
+            [
+                "BUILDNRREAD",
+                "ELEMGROUPS",
+                "DOFLIST",
+                "INPUT",
+                "WCS",
+                "GRAPHOPTIONS"
+            ]
         );
 
         let beam = beam_of(&tree);
@@ -405,7 +433,10 @@ ENDSAM
         assert_eq!(beam.get("OPTIMIZATIONS").unwrap().rows.len(), 3);
 
         let dof = tree.get("DOFLIST").unwrap();
-        assert_eq!(dof.get("NODE").unwrap().num::<f64>("X").unwrap(), -0.0731905512049187);
+        assert_eq!(
+            dof.get("NODE").unwrap().num::<f64>("X").unwrap(),
+            -0.0731905512049187
+        );
         assert_eq!(dof.get("ANGLE").unwrap().num::<u32>("NR").unwrap(), 1001);
 
         let clinear = tree
@@ -420,7 +451,10 @@ ENDSAM
         assert_eq!(clinear.num::<u32>("NSTEPS").unwrap(), 36);
         assert_eq!(clinear.num::<f64>("MOTION").unwrap(), 6.283185307179586);
 
-        assert_eq!(tree.get("WCS").unwrap().get("DEFAULT").unwrap().rows.len(), 1);
+        assert_eq!(
+            tree.get("WCS").unwrap().get("DEFAULT").unwrap().rows.len(),
+            1
+        );
         let graph = tree.get("GRAPHOPTIONS").unwrap();
         assert_eq!(graph.get("TITLE").unwrap().value, "Graph of Selected items");
         assert_eq!(graph.get("LB_LEFT").unwrap().value, "");
@@ -455,7 +489,15 @@ LINETYPES:
 ENDSAM
 ";
         let tree = parse(text).unwrap();
-        let beam = tree.get("ELEMGROUPS").unwrap().get("ELEMGRP").unwrap().get("ELEMLIST").unwrap().get("BEAM").unwrap();
+        let beam = tree
+            .get("ELEMGROUPS")
+            .unwrap()
+            .get("ELEMGRP")
+            .unwrap()
+            .get("ELEMLIST")
+            .unwrap()
+            .get("BEAM")
+            .unwrap();
         assert_eq!(beam.num::<u32>("N1").unwrap(), 8);
         assert_eq!(beam.num::<u32>("N2").unwrap(), 9);
         assert!(beam.get("LINETYPE1").is_none());
@@ -474,7 +516,10 @@ ENDSAM
     fn rejects_bad_format_version() {
         assert_eq!(
             parse("SAMASCII\nabc\nENDSAM\n").unwrap_err(),
-            SamError::BadNumber { key: "format_version".to_owned(), line: 2 }
+            SamError::BadNumber {
+                key: "format_version".to_owned(),
+                line: 2
+            }
         );
     }
 
@@ -483,12 +528,18 @@ ENDSAM
         let at_endsam = "SAMASCII\n802\n ELEMGROUPS:\n LINETYPE1:\n  COLOR:1\nENDSAM\n";
         assert_eq!(
             parse(at_endsam).unwrap_err(),
-            SamError::Missing { key: "ENDOBJ".to_owned(), line: 4 }
+            SamError::Missing {
+                key: "ENDOBJ".to_owned(),
+                line: 4
+            }
         );
         let at_eof = "SAMASCII\n802\n ELEMGROUPS:\n LINETYPE1:\n  COLOR:1\n";
         assert_eq!(
             parse(at_eof).unwrap_err(),
-            SamError::Missing { key: "ENDOBJ".to_owned(), line: 4 }
+            SamError::Missing {
+                key: "ENDOBJ".to_owned(),
+                line: 4
+            }
         );
     }
 }

@@ -557,7 +557,10 @@ mod tests {
             .beam(1, 1, 9, 1001, 1002);
         assert_eq!(
             b.build().unwrap_err(),
-            ModelError::UnknownNode { element: 1, node: 9 }
+            ModelError::UnknownNode {
+                element: 1,
+                node: 9
+            }
         );
     }
 
@@ -623,7 +626,10 @@ mod tests {
         if let ElementKind::Beam { a, .. } = &mut bad.elements[0].kind {
             *a = CoordId(999);
         }
-        assert_eq!(bad.validate(), Err(ModelError::InvalidCoordId { element: 1 }));
+        assert_eq!(
+            bad.validate(),
+            Err(ModelError::InvalidCoordId { element: 1 })
+        );
 
         let mut bad = good.clone();
         bad.inputs[0].element_nr = 77;

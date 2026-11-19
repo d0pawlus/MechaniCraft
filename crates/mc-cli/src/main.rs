@@ -29,7 +29,11 @@ use mc_samfile::{ImportError, SamError, import_project, import_sam};
 const EXIT_PARTIAL: u8 = 2;
 
 #[derive(Parser)]
-#[command(name = "mcraft", version, about = "Planar mechanism kinematics from SAM files")]
+#[command(
+    name = "mcraft",
+    version,
+    about = "Planar mechanism kinematics from SAM files"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -82,9 +86,12 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
-        Command::Analyze { file, output, nodes, forces } => {
-            analyze_command(&file, output.as_deref(), nodes, forces)
-        }
+        Command::Analyze {
+            file,
+            output,
+            nodes,
+            forces,
+        } => analyze_command(&file, output.as_deref(), nodes, forces),
         Command::Check { dir } => check_command(&dir),
     }
 }
@@ -101,7 +108,10 @@ fn analyze_command(
             import_project(&bytes).with_context(|| format!("cannot import {}", file.display()))?;
         (project.mechanism, Some(project.loads))
     } else {
-        (import_sam(&bytes).with_context(|| format!("cannot import {}", file.display()))?, None)
+        (
+            import_sam(&bytes).with_context(|| format!("cannot import {}", file.display()))?,
+            None,
+        )
     };
     let selected = select_nodes(&mech, nodes)?;
     let traj = analyze(&mech).context("analysis setup failed")?;
@@ -133,12 +143,18 @@ fn analyze_command(
 
     let mut code = ExitCode::SUCCESS;
     if let Some(err) = &traj.failure {
-        eprintln!("mcraft: analysis incomplete after {} steps: {err}", traj.states.len());
+        eprintln!(
+            "mcraft: analysis incomplete after {} steps: {err}",
+            traj.states.len()
+        );
         code = ExitCode::from(EXIT_PARTIAL);
     }
     if let Some(ft) = &force_traj {
         if let Some(err) = &ft.failure {
-            eprintln!("mcraft: kinetostatics incomplete after {} steps: {err}", ft.states.len());
+            eprintln!(
+                "mcraft: kinetostatics incomplete after {} steps: {err}",
+                ft.states.len()
+            );
             code = ExitCode::from(EXIT_PARTIAL);
         }
     }
@@ -147,7 +163,10 @@ fn analyze_command(
 
 /// Resolves the requested node numbers to `(nr, x, y)` coordinate ids in
 /// ascending node order. Without a request, all nodes of the mechanism are used.
-fn select_nodes(mech: &Mechanism, requested: Option<Vec<u32>>) -> Result<Vec<(u32, CoordId, CoordId)>> {
+fn select_nodes(
+    mech: &Mechanism,
+    requested: Option<Vec<u32>>,
+) -> Result<Vec<(u32, CoordId, CoordId)>> {
     let mut nrs: Vec<u32> = match requested {
         Some(list) => list,
         None => mech
@@ -209,7 +228,11 @@ impl ForceColumns {
         node_cols.sort_unstable_by_key(|&(nr, axis, _)| (nr, axis));
         angle_cols.sort_unstable_by_key(|&(nr, _)| nr);
         for (nr, axis, id) in node_cols {
-            let name = if axis == 0 { format!("RX{nr}") } else { format!("RY{nr}") };
+            let name = if axis == 0 {
+                format!("RX{nr}")
+            } else {
+                format!("RY{nr}")
+            };
             cols.push((name, ForceSource::Reaction(id)));
         }
         for (nr, id) in angle_cols {
@@ -314,7 +337,11 @@ fn check_command(dir: &Path) -> Result<ExitCode> {
     let mut out = stdout.lock();
     let (mut ok, mut unsupported, mut failed) = (0usize, 0usize, 0usize);
     for path in &files {
-        let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
         let outcome = match fs::read(path) {
             Ok(bytes) => classify(&bytes),
             Err(err) => Outcome::Failed(err.to_string()),
@@ -343,7 +370,11 @@ fn check_command(dir: &Path) -> Result<ExitCode> {
     )
     .context("cannot write check summary")?;
     out.flush().context("cannot write check report")?;
-    Ok(if failed > 0 { ExitCode::from(1) } else { ExitCode::SUCCESS })
+    Ok(if failed > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Lists the entries of `dir` (non-recursive) whose extension is `sam`,
