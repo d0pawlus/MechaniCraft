@@ -26,10 +26,19 @@ Odłożone uwagi z review fazy 2 (kinetostatyka). Poprawki wykonane w trakcie fa
 - `crates/mc-kineto/src/loads.rs`, `validate` (pętla bezwładności elementu): kolejność kontroli w jednym wpisie nie jest opisana w planie. Obecnie to: rodzaj, duplikat, masa, bezwładność, `cog`, `cog` suwaka. Dopisać do komentarza dokumentacyjnego zdanie opisujące tę kolejność, bo ułatwi to testy importu w T5.
 - `crates/mc-kineto/src/loads.rs`, `ForceTable::eval`: dla argumentu NaN zwracany jest pierwszy wiersz. To ukrywa niepoprawny stan wyższego poziomu (np. rozbieżne q) za wiarygodną siłą. Rozważyć propagację NaN (zwracanie `(NaN, NaN)`) albo sprawdzanie, czy q jest skończone przed wywołaniem `eval` w T3 i T4.
 - `crates/mc-core/src/system.rs` (126, 146): `assemble` i `full_jacobian` indeksują `q` i `qd` bezpośrednio, więc przy wycinku krótszym niż `mech.coords.len()` wystąpi panika. To błąd wywołującego, a nie danych wejściowych, ale warto opisać kontrakt długości w dokumentacji albo dodać `debug_assert`. Obecnie kinetostatyka sprawdza długości przed wywołaniem, więc jest to bezpieczne.
-- `crates/mc-core/src/lib.rs` (9): kolejność re-eksportów nie jest zgodna z rustfmt (oczekiwana: `ModeEval, ModeRole, element_modes, line_angle, mode_roles`). Podwójna pusta linia w `crates/mc-samfile/tests/examples.rs` (105). CI nie ma kroku `cargo fmt --check`.
-- Formatowanie w ogóle: rustfmt nie był uruchomiony, bo toolchain lokalny go nie ma (dotyczy też `crates/mc-kineto/src/loads.rs`). Po instalacji rustfmt uruchomić `cargo fmt` i sprawdzić, czy CI powinien to egzekwować.
 - Duplikacja list przykładów: `PHASE1_EXAMPLES` w `crates/mc-samfile/tests/examples.rs` powiela listę w `phase1_examples_analyze`, a lista EXAMPLES w `crates/mc-samfile/tests/kinetostatics.rs` to trzecia kopia. Wyciągnąć jedną wspólną stałą.
 - `crates/mc-kineto/Cargo.toml`: `nalgebra` jest zadeklarowane, ale jeszcze nieużywane. To zgodne z sekcją Interfaces planu i nie daje ostrzeżeń. Potwierdzić użycie w T3 lub T4, albo usunąć zależność.
 - Historia commitów: poprawki T1 (`dfcd5ef`) i T3 (`4db8816`) dodają pliki brakujące w commitach `25b3149` i `91c623a`, więc te commity nie budują się same (zagrożenie dla bisect). Rozważyć squash każdej pary przed scaleniem. Gałąź ma 9 commitów kodu dla 7 zadań.
 - Proces: stopki `Co-Authored-By` w commitach (w tym `74d36e6`) wskazują Sonnet 5.5 lub Haiku 5.5. Sprawdzić, czy odpowiadają faktycznym wykonawcom. Dotyczy to wyłącznie procesu, nie kodu.
 - Weryfikacja po scaleniu: w momencie T6 `crates/mc-cli/tests/cli.rs` miał niezacommitowane zmiany innego agenta (T7), więc pełny `cargo test --workspace` nie został zweryfikowany dla tego commitu. Uruchomić ponownie po scaleniu T7.
+
+## Faza 3
+
+Uwagi z review podglądu, odłożone.
+
+- `crates/mc-app/src/app.rs`, `receive_files`: pliki upuszczone na okno są czytane z `raw.dropped_files` w `ui()`. Jeśli egui wykona kilka przebiegów w jednej klatce, ten sam plik może zostać otwarty dwa razy. Przenieść odbiór do `App::logic` albo odfiltrować duplikaty.
+- `crates/mc-app/src/files.rs`, `pick_file` (desktop): blokujące `rfd::FileDialog` wewnątrz `ui()`. Na Linuksie (xdg-portal) okno przestaje się odświeżać, dopóki dialog jest otwarty. Użyć `AsyncFileDialog` na wątku i oddawać wynik przez `Inbox`.
+- `crates/mc-app/src/app.rs`, `plot` i `canvas::paint`: próbki kanału i tor węzła są liczone i alokowane w każdej klatce. Zapamiętać je dla pary (dokument, kanał lub węzeł). Bounds są już liczone raz przy wczytaniu.
+- `crates/mc-view/src/playback.rs`: `Playback` trzyma własną kopię czasów klatek. Przy przyszłym przeliczaniu dokumentu trzeba ją odbudować razem z nim, inaczej `frame()` wskaże klatki spoza trajektorii.
+- Lista kanałów w rozwijanym menu jest długa (każda współrzędna razy trzy pochodne). Pogrupować (węzły, kąty, siły) albo dodać filtr.
+- Kryterium fazy (`SLCR.SAM` z animacją i wykresem x(t)) trzeba sprawdzić na Windows z przykładami SAM. Droga `trunk serve` nie była uruchamiana.

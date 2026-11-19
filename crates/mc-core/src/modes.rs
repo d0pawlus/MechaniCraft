@@ -82,7 +82,13 @@ impl Span {
     }
 
     /// Gradient of `α` with respect to the four node coordinates.
-    fn grad_alpha(&self, p: [CoordId; 2], q: [CoordId; 2], scale: f64, g: &mut Vec<(CoordId, f64)>) {
+    fn grad_alpha(
+        &self,
+        p: [CoordId; 2],
+        q: [CoordId; 2],
+        scale: f64,
+        g: &mut Vec<(CoordId, f64)>,
+    ) {
         let l2 = self.len * self.len;
         let (ax, ay) = (-self.d[1] / l2, self.d[0] / l2);
         add_grad(g, q[0], scale * ax);
@@ -297,7 +303,10 @@ mod tests {
     }
 
     fn perturbed(mech: &Mechanism, rng: &mut Lcg) -> Vec<f64> {
-        value0(mech).into_iter().map(|v| v + 0.05 * rng.next()).collect()
+        value0(mech)
+            .into_iter()
+            .map(|v| v + 0.05 * rng.next())
+            .collect()
     }
 
     fn all_values(mech: &Mechanism, q: &[f64], qd: &[f64]) -> Vec<f64> {

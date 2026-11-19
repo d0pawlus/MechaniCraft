@@ -17,7 +17,10 @@ fn examples_dir() -> Option<PathBuf> {
     if dir.is_dir() {
         Some(dir)
     } else {
-        eprintln!("skipping: SAM examples directory {} not found", dir.display());
+        eprintln!(
+            "skipping: SAM examples directory {} not found",
+            dir.display()
+        );
         None
     }
 }
@@ -102,7 +105,6 @@ fn phase1_examples_analyze() {
     }
     assert!(failures.is_empty(), "failing examples: {failures:#?}");
 }
-
 
 const PHASE1_EXAMPLES: [&str; 10] = [
     "SLCR.SAM",

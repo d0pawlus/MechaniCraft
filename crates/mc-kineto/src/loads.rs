@@ -157,9 +157,7 @@ impl Loads {
                 return Err(LoadError::DuplicateElementInertia(ei.element));
             }
             finite_non_negative(ei.mass, || format!("mass of element {}", ei.element))?;
-            finite_non_negative(ei.inertia, || {
-                format!("inertia of element {}", ei.element)
-            })?;
+            finite_non_negative(ei.inertia, || format!("inertia of element {}", ei.element))?;
             if !(0.0..=1.0).contains(&ei.cog) {
                 return Err(LoadError::CogOutOfRange {
                     element: ei.element,
@@ -323,12 +321,8 @@ mod tests {
 
     #[test]
     fn force_table_interpolates_and_clamps() {
-        let t = ForceTable::new(vec![
-            [0.0, 10.0, 0.0],
-            [1.0, 30.0, 1.0],
-            [3.0, 70.0, 2.0],
-        ])
-        .unwrap();
+        let t =
+            ForceTable::new(vec![[0.0, 10.0, 0.0], [1.0, 30.0, 1.0], [3.0, 70.0, 2.0]]).unwrap();
         let check = |got: (f64, f64), want: (f64, f64)| {
             assert_abs_diff_eq!(got.0, want.0, epsilon = 1e-12);
             assert_abs_diff_eq!(got.1, want.1, epsilon = 1e-12);

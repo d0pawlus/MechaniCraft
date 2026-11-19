@@ -4,7 +4,10 @@ Współczesne, wieloplatformowe narzędzie w Ruście do analizy i (docelowo) syn
 
 > Projekt clean-room: nie zawiera kodu, zasobów ani plików przykładowych innych programów. Import plików `.SAM` (SAM 8.5) służy wyłącznie interoperacyjności.
 
-## Stan: faza 2, kinetostatyka
+## Stan: faza 3, podgląd
+- Podgląd `mcraft-view` (desktop i przeglądarka, egui): wczytanie `.SAM` (okno wyboru lub przeciągnięcie pliku), animacja mechanizmu z podporami, wykres wybranego kanału z linią bieżącego czasu (klik w wykres przewija animację), tor wybranego węzła. Na starcie otwiera się wbudowany korbowód (`fixtures/demo/slider-crank.sam`).
+
+Wcześniej (faza 1 i 2):
 - Elementy: belka (także jako siłownik liniowy), suwak, przegub (`HINGE`), napęd obrotowy (`ROTMOTOR`), podpory x/y/kąt.
 - Ruch wejściowy: liniowy (wiele segmentów).
 - Wyniki: położenia, prędkości i przyspieszenia wszystkich współrzędnych (Newton-Raphson).
@@ -24,7 +27,15 @@ cargo run -p mc-cli -- analyze projekt.sam -o wyniki.csv
 cargo run -p mc-cli -- analyze projekt.sam --nodes 3
 cargo run -p mc-cli -- analyze projekt.sam --forces
 cargo run -p mc-cli -- check katalog_z_projektami
+cargo run -p mc-app --release            # podgląd na desktopie
 ```
+Podgląd w przeglądarce (cel `wasm32-unknown-unknown` i `wasm-bindgen-cli` w wersji z `Cargo.lock`):
+```bash
+cargo build -p mc-app --release --target wasm32-unknown-unknown
+wasm-bindgen --target web --no-typescript --out-dir web target/wasm32-unknown-unknown/release/mcraft-view.wasm
+```
+Do katalogu `web` trzeba dodać `index.html` z płótnem `<canvas id="mc_canvas">` i skryptem `import init from "./mcraft-view.js"; init();`, a potem go serwować (np. `python3 -m http.server`). `crates/mc-app/index.html` jest przygotowany pod `trunk serve`, ale ta droga nie była jeszcze sprawdzona.
+Kanały wykresu: `x3`, `y3`, `A1001` (położenie), z `'` prędkość, z `''` przyspieszenie, `DRV<nr>` i `PWR<nr>` jak w CSV.
 Z `--forces` po kolumnach węzłów dochodzą: `DRV<nr>`, `PWR<nr>` (siła lub moment napędowy i moc każdego wejścia), `RX<nr>`, `RY<nr>`, `RA<nr>` (reakcje na współrzędnych zablokowanych: węzły rosnąco, potem kąty) i `N<nr>` (siła normalna belki, dodatnia przy rozciąganiu). `check` sprawdza import, kinematykę i kinetostatykę.
 
 Kody wyjścia `analyze`: `0` pełny wynik, `2` wynik częściowy kinematyki lub sił (CSV zapisany, błąd na stderr), `1` błąd importu lub argumentów.
@@ -36,6 +47,8 @@ Kody wyjścia `analyze`: `0` pełny wynik, `2` wynik częściowy kinematyki lub 
 | `mc-core` | model mechanizmu, mody deformacji elementów, solver kinematyki |
 | `mc-kineto` | model obciążeń, siły uogólnione, solver kinetostatyki |
 | `mc-samfile` | parser i import plików SAM ASCII |
+| `mc-view` | model widoku bez GUI: dokument, geometria klatki, odtwarzanie, kanały, tor węzła |
+| `mc-app` | podgląd `mcraft-view` (eframe/egui, desktop i WASM) |
 | `mc-cli` | narzędzie `mcraft` |
 
 Testy na przykładach SAM czytają je z `SAM_EXAMPLES_DIR` (domyślnie `C:\Users\Public\Documents\Sam\Examples`) i pomijają się, gdy katalogu nie ma.
@@ -44,4 +57,5 @@ Testy na przykładach SAM czytają je z `SAM_EXAMPLES_DIR` (domyślnie `C:\Users
 - [Projekt i mapa drogowa](docs/superpowers/specs/2026-11-08-mechanismcraft-design.md)
 - [Plan fazy 1](docs/superpowers/plans/2026-11-08-phase1-kinematic-core.md)
 - [Plan fazy 2](docs/superpowers/plans/2026-11-09-phase2-kinetostatics.md)
+- [Plan fazy 3](docs/superpowers/plans/2026-11-19-phase3-viewer.md)
 - [Backlog fazy 1](docs/backlog-phase1.md) i [backlog fazy 2](docs/backlog.md)

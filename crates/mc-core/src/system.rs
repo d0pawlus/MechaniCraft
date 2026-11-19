@@ -202,7 +202,11 @@ mod tests {
         let sys = ModeSystem::new(&mech).unwrap();
         assert_eq!(sys.equations().len(), 7);
         assert_eq!(sys.free().len(), 7);
-        let driven: Vec<_> = sys.equations().iter().filter(|e| e.input.is_some()).collect();
+        let driven: Vec<_> = sys
+            .equations()
+            .iter()
+            .filter(|e| e.input.is_some())
+            .collect();
         assert_eq!(driven.len(), 1);
         assert_eq!(driven[0].input, Some(0));
     }

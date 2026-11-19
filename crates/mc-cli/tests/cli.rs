@@ -127,7 +127,11 @@ fn write_file(dir: &Path, name: &str, text: &str) {
 }
 
 fn run(args: &[&str]) -> Output {
-    Command::cargo_bin("mcraft").unwrap().args(args).output().unwrap()
+    Command::cargo_bin("mcraft")
+        .unwrap()
+        .args(args)
+        .output()
+        .unwrap()
 }
 
 fn stdout_of(output: &Output) -> String {
@@ -145,8 +149,18 @@ fn analyze_writes_csv() {
     fs::write(&input, SLIDER_CRANK).unwrap();
     let out = dir.path().join("out.csv");
 
-    let output = run(&["analyze", input.to_str().unwrap(), "-o", out.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    let output = run(&[
+        "analyze",
+        input.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 
     let csv = fs::read_to_string(&out).unwrap();
     let lines: Vec<&str> = csv.split('\n').collect();
@@ -157,7 +171,11 @@ fn analyze_writes_csv() {
         lines[0],
         "step,t,X1,Y1,VX1,VY1,AX1,AY1,X2,Y2,VX2,VY2,AX2,AY2,X3,Y3,VX3,VY3,AX3,AY3"
     );
-    assert!(lines[1].starts_with("0,0.000000000000e0,"), "row = {}", lines[1]);
+    assert!(
+        lines[1].starts_with("0,0.000000000000e0,"),
+        "row = {}",
+        lines[1]
+    );
     assert_eq!(lines[1].split(',').count(), 2 + 6 * 3);
 }
 
@@ -168,7 +186,12 @@ fn analyze_selected_nodes_are_ascending() {
     fs::write(&input, SLIDER_CRANK).unwrap();
 
     let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "3,2"]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
     let stdout = stdout_of(&output);
     assert_eq!(
         stdout.lines().next().unwrap(),
@@ -185,7 +208,11 @@ fn analyze_unknown_node_fails_with_exit_1() {
 
     let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "99"]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_of(&output).contains("99"), "stderr = {}", stderr_of(&output));
+    assert!(
+        stderr_of(&output).contains("99"),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 }
 
 #[test]
@@ -196,7 +223,11 @@ fn analyze_unsupported_input_fails_with_exit_1() {
 
     let output = run(&["analyze", input.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_of(&output).contains("GEAR"), "stderr = {}", stderr_of(&output));
+    assert!(
+        stderr_of(&output).contains("GEAR"),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 }
 
 #[test]
@@ -205,14 +236,24 @@ fn check_reports_unsupported_without_failing() {
     write_file(dir.path(), "gear.sam", WITH_GEAR);
 
     let output = run(&["check", dir.path().to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
     let stdout = stdout_of(&output);
     let gear_line = WITH_GEAR.lines().position(|l| l.trim() == "GEAR:").unwrap() + 1;
     assert!(
-        stdout.contains(&format!("UNSUPPORTED  gear.sam  element GEAR at line {gear_line}")),
+        stdout.contains(&format!(
+            "UNSUPPORTED  gear.sam  element GEAR at line {gear_line}"
+        )),
         "stdout = {stdout}"
     );
-    assert!(stdout.contains("1 files: 0 OK, 1 UNSUPPORTED, 0 FAILED"), "stdout = {stdout}");
+    assert!(
+        stdout.contains("1 files: 0 OK, 1 UNSUPPORTED, 0 FAILED"),
+        "stdout = {stdout}"
+    );
 }
 
 #[test]
@@ -228,9 +269,21 @@ fn check_summarises_and_fails_only_on_failed() {
     let stdout = stdout_of(&output);
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 4, "stdout = {stdout}");
-    assert!(lines[0].starts_with("OK  a_slider.SAM  37"), "line = {}", lines[0]);
-    assert!(lines[1].starts_with("UNSUPPORTED  b_gear.sam  "), "line = {}", lines[1]);
-    assert!(lines[2].starts_with("FAILED  c_broken.sam  "), "line = {}", lines[2]);
+    assert!(
+        lines[0].starts_with("OK  a_slider.SAM  37"),
+        "line = {}",
+        lines[0]
+    );
+    assert!(
+        lines[1].starts_with("UNSUPPORTED  b_gear.sam  "),
+        "line = {}",
+        lines[1]
+    );
+    assert!(
+        lines[2].starts_with("FAILED  c_broken.sam  "),
+        "line = {}",
+        lines[2]
+    );
     assert_eq!(lines[3], "3 files: 1 OK, 1 UNSUPPORTED, 1 FAILED");
 }
 
@@ -242,19 +295,34 @@ fn analyze_unparseable_nodes_exits_with_1() {
 
     // Usage errors must exit 1; clap's default 2 would collide with "partial CSV".
     let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "abc"]);
-    assert_eq!(output.status.code(), Some(1), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 }
 
 #[test]
 fn analyze_missing_file_argument_exits_with_1() {
     let output = run(&["analyze"]);
-    assert_eq!(output.status.code(), Some(1), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 }
 
 #[test]
 fn help_exits_with_0() {
     let output = run(&["--help"]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 }
 
 #[test]
@@ -264,7 +332,12 @@ fn analyze_row_zero_matches_file_coordinates() {
     fs::write(&input, SLIDER_CRANK).unwrap();
 
     let output = run(&["analyze", input.to_str().unwrap(), "--nodes", "1,3"]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
     let stdout = stdout_of(&output);
     let mut lines = stdout.lines();
     let header: Vec<&str> = lines.next().unwrap().split(',').collect();
@@ -296,12 +369,30 @@ fn analyze_partial_result_exits_with_2() {
     // Exit 2 is triggered by an input far outside the reachable range: a
     // rotation of 1e6 rad in one second is not reachable from the previous
     // configuration, so Newton stops with no convergence after a few steps.
-    fs::write(&input, SLIDER_CRANK.replace("MOTION:6.283185307179586", "MOTION:1000000")).unwrap();
+    fs::write(
+        &input,
+        SLIDER_CRANK.replace("MOTION:6.283185307179586", "MOTION:1000000"),
+    )
+    .unwrap();
     let out = dir.path().join("partial.csv");
 
-    let output = run(&["analyze", input.to_str().unwrap(), "-o", out.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(2), "stderr = {}", stderr_of(&output));
-    assert!(stderr_of(&output).contains("incomplete"), "stderr = {}", stderr_of(&output));
+    let output = run(&[
+        "analyze",
+        input.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "stderr = {}",
+        stderr_of(&output)
+    );
+    assert!(
+        stderr_of(&output).contains("incomplete"),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 
     let csv = fs::read_to_string(&out).unwrap();
     let rows = csv.lines().count();
@@ -316,13 +407,28 @@ fn analyze_forces_adds_columns() {
     fs::write(&input, slider_crank_loaded()).unwrap();
     let out = dir.path().join("out.csv");
 
-    let output = run(&["analyze", input.to_str().unwrap(), "--forces", "-o", out.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    let output = run(&[
+        "analyze",
+        input.to_str().unwrap(),
+        "--forces",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
 
     let csv = fs::read_to_string(&out).unwrap();
     let lines: Vec<&str> = csv.split('\n').collect();
     assert_eq!(lines.len(), 39);
-    assert!(lines[0].ends_with(",DRV3,PWR3,RX1,RY1,RY3,RA1005,N1,N2"), "header = {}", lines[0]);
+    assert!(
+        lines[0].ends_with(",DRV3,PWR3,RX1,RY1,RY3,RA1005,N1,N2"),
+        "header = {}",
+        lines[0]
+    );
     let width = lines[0].split(',').count();
     for row in &lines[1..38] {
         let cells: Vec<&str> = row.split(',').collect();
@@ -340,7 +446,12 @@ fn analyze_without_forces_is_unchanged() {
     fs::write(&input, slider_crank_loaded()).unwrap();
 
     let output = run(&["analyze", input.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
     let header = stdout_of(&output).lines().next().unwrap().to_owned();
     assert!(!header.contains("DRV"), "header = {header}");
     assert!(header.ends_with(",AY3"), "header = {header}");
@@ -356,7 +467,12 @@ fn check_runs_kinetostatics() {
     write_file(dir.path(), "torque.sam", &text);
 
     let output = run(&["check", dir.path().to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(0), "stderr = {}", stderr_of(&output));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "stderr = {}",
+        stderr_of(&output)
+    );
     let stdout = stdout_of(&output);
     assert!(stdout.contains("UNSUPPORTED"), "stdout = {stdout}");
     assert!(stdout.contains("torque"), "stdout = {stdout}");
