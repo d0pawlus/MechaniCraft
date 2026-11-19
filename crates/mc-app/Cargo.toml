@@ -1,0 +1,21 @@
+[package]
+name = "mc-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MechaniCraft viewer: animation, plots and point paths (desktop and web)"
+
+[[bin]]
+name = "mcraft-view"
+path = "src/main.rs"
+
+[dependencies]
+mc-view = { path = "../mc-view" }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui_plot = "0.38"
+rfd = "0.18"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "Window", "HtmlCanvasElement", "Element"] }

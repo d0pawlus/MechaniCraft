@@ -23,6 +23,9 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Install GUI system libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libgtk-3-dev
       - name: Format
         run: cargo fmt --all --check
       - name: Build
@@ -30,3 +33,15 @@ jobs:
       - name: Test
         # SAM example projects are not in the repo; tests that need them skip themselves.
         run: cargo test --workspace --locked
+
+  wasm:
+    name: viewer (wasm32)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Build viewer for the web
+        run: cargo build -p mc-app --target wasm32-unknown-unknown --locked
