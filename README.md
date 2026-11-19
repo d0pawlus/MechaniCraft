@@ -29,10 +29,12 @@ cargo run -p mc-cli -- analyze projekt.sam --forces
 cargo run -p mc-cli -- check katalog_z_projektami
 cargo run -p mc-app --release            # podgląd na desktopie
 ```
-Podgląd w przeglądarce (wymaga [trunk](https://trunkrs.dev) i celu `wasm32-unknown-unknown`):
+Podgląd w przeglądarce (cel `wasm32-unknown-unknown` i `wasm-bindgen-cli` w wersji z `Cargo.lock`):
 ```bash
-cd crates/mc-app && trunk serve --release
+cargo build -p mc-app --release --target wasm32-unknown-unknown
+wasm-bindgen --target web --no-typescript --out-dir web target/wasm32-unknown-unknown/release/mcraft-view.wasm
 ```
+Do katalogu `web` trzeba dodać `index.html` z płótnem `<canvas id="mc_canvas">` i skryptem `import init from "./mcraft-view.js"; init();`, a potem go serwować (np. `python3 -m http.server`). `crates/mc-app/index.html` jest przygotowany pod `trunk serve`, ale ta droga nie była jeszcze sprawdzona.
 Kanały wykresu: `x3`, `y3`, `A1001` (położenie), z `'` prędkość, z `''` przyspieszenie, `DRV<nr>` i `PWR<nr>` jak w CSV.
 Z `--forces` po kolumnach węzłów dochodzą: `DRV<nr>`, `PWR<nr>` (siła lub moment napędowy i moc każdego wejścia), `RX<nr>`, `RY<nr>`, `RA<nr>` (reakcje na współrzędnych zablokowanych: węzły rosnąco, potem kąty) i `N<nr>` (siła normalna belki, dodatnia przy rozciąganiu). `check` sprawdza import, kinematykę i kinetostatykę.
 

@@ -332,3 +332,21 @@ fn view_transform_keeps_margin_and_handles_degenerate_bounds() {
     assert_abs_diff_eq!(c[0], 50.0);
     assert_abs_diff_eq!(c[1], 25.0);
 }
+
+#[test]
+fn unsupported_loads_fall_back_to_kinematics_only() {
+    let text = DEMO.replace(
+        "  X:0.4\n  Y:0\n",
+        "  X:0.4\n  Y:0\n  FORCEBLOCK:\n   EDNR:3\n   ISTORQUE:1\n   ARGTYPE:2\n   DISABLED:0\n",
+    );
+    let doc = load("torque.sam", text.as_bytes()).expect("kinematics still load");
+    assert_eq!(doc.frame_count(), STATES);
+    assert!(doc.forces.is_none());
+    assert!(
+        doc.warnings
+            .iter()
+            .any(|w| w.starts_with("loads not imported") && w.contains("torque")),
+        "{:?}",
+        doc.warnings
+    );
+}
